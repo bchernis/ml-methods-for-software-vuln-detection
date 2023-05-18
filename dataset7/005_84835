@@ -1,0 +1,3 @@
+ZEND_API zend_mm_heap *zend_mm_startup(void){
+ return zend_mm_init();
+}

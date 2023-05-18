@@ -1,0 +1,26 @@
+static int jpc_dec_process_eoc(jpc_dec_t *dec, jpc_ms_t *ms){
+ int tileno;
+ jpc_dec_tile_t *tile;
+
+
+ ms = 0;
+
+ for (tileno = 0, tile = dec->tiles; tileno < dec->numtiles; ++tileno,
+   ++tile){
+  if (tile->state == JPC_TILE_ACTIVE){
+   if (jpc_dec_tiledecode(dec, tile)){
+    return -1;
+   }
+  }
+
+
+  if (tile->state != JPC_TILE_DONE){
+   jpc_dec_tilefini(dec, tile);
+  }
+ }
+
+
+ dec->state = JPC_MT;
+
+ return 1;
+}

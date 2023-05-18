@@ -1,0 +1,7 @@
+proc_body (void){
+  current_type = body_type;
+  current_regex = &body_regex;
+  if (reset_numbers)
+    line_no = starting_line_number;
+  putchar ('\n');
+}

@@ -1,0 +1,27 @@
+void printIGD(struct IGDdatas * d){
+ printf("urlbase = '%s'\n", d->urlbase);
+ printf("WAN Device (Common interface config) :\n");
+
+ printf(" serviceType = '%s'\n", d->CIF.servicetype);
+ printf(" controlURL = '%s'\n", d->CIF.controlurl);
+ printf(" eventSubURL = '%s'\n", d->CIF.eventsuburl);
+ printf(" SCPDURL = '%s'\n", d->CIF.scpdurl);
+ printf("primary WAN Connection Device (IP or PPP Connection):\n");
+
+ printf(" servicetype = '%s'\n", d->first.servicetype);
+ printf(" controlURL = '%s'\n", d->first.controlurl);
+ printf(" eventSubURL = '%s'\n", d->first.eventsuburl);
+ printf(" SCPDURL = '%s'\n", d->first.scpdurl);
+ printf("secondary WAN Connection Device (IP or PPP Connection):\n");
+
+ printf(" servicetype = '%s'\n", d->second.servicetype);
+ printf(" controlURL = '%s'\n", d->second.controlurl);
+ printf(" eventSubURL = '%s'\n", d->second.eventsuburl);
+ printf(" SCPDURL = '%s'\n", d->second.scpdurl);
+ printf("WAN IPv6 Firewall Control :\n");
+
+ printf(" servicetype = '%s'\n", d->IPv6FC.servicetype);
+ printf(" controlURL = '%s'\n", d->IPv6FC.controlurl);
+ printf(" eventSubURL = '%s'\n", d->IPv6FC.eventsuburl);
+ printf(" SCPDURL = '%s'\n", d->IPv6FC.scpdurl);
+}

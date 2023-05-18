@@ -1,0 +1,8 @@
+getroom_save(spellinfo_T *spin, char_u *s){
+    char_u *sc;
+
+    sc = (char_u *)getroom(spin, STRLEN(s) + 1, FALSE);
+    if (sc != NULL)
+ STRCPY(sc, s);
+    return sc;
+}

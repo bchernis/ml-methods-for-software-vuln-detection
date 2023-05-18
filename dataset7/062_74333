@@ -1,0 +1,9 @@
+is_aff_rule(
+    char_u **items,
+    int itemcnt,
+    char *rulename,
+    int mincount){
+    return (STRCMP(items[0], rulename) == 0
+     && (itemcnt == mincount
+  || (itemcnt > mincount && items[mincount][0] == '#')));
+}

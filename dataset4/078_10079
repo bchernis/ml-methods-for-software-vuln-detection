@@ -1,0 +1,145 @@
+main (int argc, char **argv){
+  bool preserve_root = true;
+  struct rm_options x;
+  bool prompt_once = false;
+  int c;
+
+  initialize_main (&argc, &argv);
+  set_program_name (argv[0]);
+  setlocale (LC_ALL, "");
+  bindtextdomain (PACKAGE, LOCALEDIR);
+  textdomain (PACKAGE);
+
+  atexit (close_stdin);
+
+  rm_option_init (&x);
+
+
+  priv_set_remove_linkdir ();
+
+  while ((c = getopt_long (argc, argv, "dfirvIR", long_opts, NULL)) != -1){
+      switch (c){
+        case 'd':
+          x.remove_empty_directories = true;
+          break;
+
+        case 'f':
+          x.interactive = RMI_NEVER;
+          x.ignore_missing_files = true;
+          prompt_once = false;
+          break;
+
+        case 'i':
+          x.interactive = RMI_ALWAYS;
+          x.ignore_missing_files = false;
+          prompt_once = false;
+          break;
+
+        case 'I':
+          x.interactive = RMI_SOMETIMES;
+          x.ignore_missing_files = false;
+          prompt_once = true;
+          break;
+
+        case 'r':
+        case 'R':
+          x.recursive = true;
+          break;
+
+        case INTERACTIVE_OPTION:{
+            int i;
+            if (optarg)
+              i = XARGMATCH ("--interactive", optarg, interactive_args,
+                             interactive_types);
+            else
+              i = interactive_always;
+            switch (i){
+              case interactive_never:
+                x.interactive = RMI_NEVER;
+                prompt_once = false;
+                break;
+
+              case interactive_once:
+                x.interactive = RMI_SOMETIMES;
+                x.ignore_missing_files = false;
+                prompt_once = true;
+                break;
+
+              case interactive_always:
+                x.interactive = RMI_ALWAYS;
+                x.ignore_missing_files = false;
+                prompt_once = false;
+                break;
+              }
+            break;
+          }
+
+        case ONE_FILE_SYSTEM:
+          x.one_file_system = true;
+          break;
+
+        case NO_PRESERVE_ROOT:
+          if (! STREQ (argv[optind - 1], "--no-preserve-root"))
+            die (EXIT_FAILURE, 0,
+                 _("you may not abbreviate the --no-preserve-root option"));
+          preserve_root = false;
+          break;
+
+        case PRESERVE_ROOT:
+          preserve_root = true;
+          break;
+
+        case PRESUME_INPUT_TTY_OPTION:
+          x.stdin_tty = true;
+          break;
+
+        case 'v':
+          x.verbose = true;
+          break;
+
+        case_GETOPT_HELP_CHAR;
+        case_GETOPT_VERSION_CHAR (PROGRAM_NAME, AUTHORS);
+        default:
+          diagnose_leading_hyphen (argc, argv);
+          usage (EXIT_FAILURE);
+        }
+    }
+
+  if (argc <= optind){
+      if (x.ignore_missing_files)
+        return EXIT_SUCCESS;
+      else{
+          error (0, 0, _("missing operand"));
+          usage (EXIT_FAILURE);
+        }
+    }
+
+  if (x.recursive && preserve_root){
+      static struct dev_ino dev_ino_buf;
+      x.root_dev_ino = get_root_dev_ino (&dev_ino_buf);
+      if (x.root_dev_ino == NULL)
+        die (EXIT_FAILURE, errno, _("failed to get attributes of %s"),
+             quoteaf ("/"));
+    }
+
+  uintmax_t n_files = argc - optind;
+  char **file = argv + optind;
+
+  if (prompt_once && (x.recursive || 3 < n_files)){
+      fprintf (stderr,
+               (x.recursive
+                ? ngettext ("%s: remove %"PRIuMAX" argument recursively? ",
+                            "%s: remove %"PRIuMAX" arguments recursively? ",
+                            select_plural (n_files))
+                : ngettext ("%s: remove %"PRIuMAX" argument? ",
+                            "%s: remove %"PRIuMAX" arguments? ",
+                            select_plural (n_files))),
+               program_name, n_files);
+      if (!yesno ())
+        return EXIT_SUCCESS;
+    }
+
+  enum RM_status status = rm (file, &x);
+  assert (VALID_STATUS (status));
+  return status == RM_ERROR ? EXIT_FAILURE : EXIT_SUCCESS;
+}

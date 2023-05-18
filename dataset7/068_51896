@@ -1,0 +1,9 @@
+file_strncmp16(const char *a, const char *b, size_t len, uint32_t flags){
+
+
+
+
+
+ flags = 0;
+ return file_strncmp(a, b, len, flags);
+}

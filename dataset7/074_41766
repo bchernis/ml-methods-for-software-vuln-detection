@@ -1,0 +1,442 @@
+rfbSendFramebufferUpdate(rfbClientPtr cl,
+                         sraRegionPtr givenUpdateRegion){
+    sraRectangleIterator* i=NULL;
+    sraRect rect;
+    int nUpdateRegionRects;
+    rfbFramebufferUpdateMsg *fu = (rfbFramebufferUpdateMsg *)cl->updateBuf;
+    sraRegionPtr updateRegion,updateCopyRegion,tmpRegion;
+    int dx, dy;
+    rfbBool sendCursorShape = FALSE;
+    rfbBool sendCursorPos = FALSE;
+    rfbBool sendKeyboardLedState = FALSE;
+    rfbBool sendSupportedMessages = FALSE;
+    rfbBool sendSupportedEncodings = FALSE;
+    rfbBool sendServerIdentity = FALSE;
+    rfbBool result = TRUE;
+
+
+    if(cl->screen->displayHook)
+      cl->screen->displayHook(cl);
+
+
+
+
+
+
+    if (cl->useNewFBSize && cl->newFBSizePending){
+      LOCK(cl->updateMutex);
+      cl->newFBSizePending = FALSE;
+      UNLOCK(cl->updateMutex);
+      fu->type = rfbFramebufferUpdate;
+      fu->nRects = Swap16IfLE(1);
+      cl->ublen = sz_rfbFramebufferUpdateMsg;
+      if (!rfbSendNewFBSize(cl, cl->scaledScreen->width, cl->scaledScreen->height)){
+ if(cl->screen->displayFinishedHook)
+   cl->screen->displayFinishedHook(cl, FALSE);
+        return FALSE;
+      }
+      result = rfbSendUpdateBuf(cl);
+      if(cl->screen->displayFinishedHook)
+ cl->screen->displayFinishedHook(cl, result);
+      return result;
+    }
+
+
+
+
+
+
+    if (cl->enableCursorShapeUpdates){
+      if (cl->cursorWasChanged && cl->readyForSetColourMapEntries)
+   sendCursorShape = TRUE;
+    }
+
+
+
+
+
+    if (cl->enableCursorPosUpdates && cl->cursorWasMoved)
+      sendCursorPos = TRUE;
+
+
+
+
+    if ((cl->enableKeyboardLedState) &&
+ (cl->screen->getKeyboardLedStateHook!=NULL)){
+        int x;
+        x=cl->screen->getKeyboardLedStateHook(cl->screen);
+        if (x!=cl->lastKeyboardLedState){
+            sendKeyboardLedState = TRUE;
+            cl->lastKeyboardLedState=x;
+        }
+    }
+
+
+
+
+    if (cl->enableSupportedMessages){
+        sendSupportedMessages = TRUE;
+
+
+
+        cl->enableSupportedMessages = FALSE;
+    }
+
+
+
+    if (cl->enableSupportedEncodings){
+        sendSupportedEncodings = TRUE;
+
+
+
+        cl->enableSupportedEncodings = FALSE;
+    }
+
+
+
+    if (cl->enableServerIdentity){
+        sendServerIdentity = TRUE;
+
+
+
+        cl->enableServerIdentity = FALSE;
+    }
+
+    LOCK(cl->updateMutex);
+
+
+
+
+
+
+
+    sraRgnSubtract(cl->copyRegion,cl->modifiedRegion);
+# 2756 "originals/25a.c"
+    updateRegion = sraRgnCreateRgn(givenUpdateRegion);
+    if(cl->screen->progressiveSliceHeight>0){
+     int height=cl->screen->progressiveSliceHeight,
+      y=cl->progressiveSliceY;
+     sraRegionPtr bbox=sraRgnBBox(updateRegion);
+     sraRect rect;
+     if(sraRgnPopRect(bbox,&rect,0)){
+  sraRegionPtr slice;
+  if(y<rect.y1 || y>=rect.y2)
+      y=rect.y1;
+      slice=sraRgnCreateRect(0,y,cl->screen->width,y+height);
+  sraRgnAnd(updateRegion,slice);
+  sraRgnDestroy(slice);
+     }
+     sraRgnDestroy(bbox);
+     y+=height;
+     if(y>=cl->screen->height)
+      y=0;
+     cl->progressiveSliceY=y;
+    }
+
+    sraRgnOr(updateRegion,cl->copyRegion);
+    if(!sraRgnAnd(updateRegion,cl->requestedRegion) &&
+       sraRgnEmpty(updateRegion) &&
+       (cl->enableCursorShapeUpdates ||
+ (cl->cursorX == cl->screen->cursorX && cl->cursorY == cl->screen->cursorY)) &&
+       !sendCursorShape && !sendCursorPos && !sendKeyboardLedState &&
+       !sendSupportedMessages && !sendSupportedEncodings && !sendServerIdentity){
+      sraRgnDestroy(updateRegion);
+      UNLOCK(cl->updateMutex);
+      if(cl->screen->displayFinishedHook)
+ cl->screen->displayFinishedHook(cl, TRUE);
+      return TRUE;
+    }
+# 2800 "originals/25a.c"
+    updateCopyRegion = sraRgnCreateRgn(cl->copyRegion);
+    sraRgnAnd(updateCopyRegion,cl->requestedRegion);
+    tmpRegion = sraRgnCreateRgn(cl->requestedRegion);
+    sraRgnOffset(tmpRegion,cl->copyDX,cl->copyDY);
+    sraRgnAnd(updateCopyRegion,tmpRegion);
+    sraRgnDestroy(tmpRegion);
+    dx = cl->copyDX;
+    dy = cl->copyDY;
+
+
+
+
+
+
+
+    sraRgnSubtract(updateRegion,updateCopyRegion);
+# 2824 "originals/25a.c"
+     sraRgnOr(cl->modifiedRegion,cl->copyRegion);
+     sraRgnSubtract(cl->modifiedRegion,updateRegion);
+     sraRgnSubtract(cl->modifiedRegion,updateCopyRegion);
+
+     sraRgnMakeEmpty(cl->requestedRegion);
+     sraRgnMakeEmpty(cl->copyRegion);
+     cl->copyDX = 0;
+     cl->copyDY = 0;
+
+     UNLOCK(cl->updateMutex);
+
+    if (!cl->enableCursorShapeUpdates){
+      if(cl->cursorX != cl->screen->cursorX || cl->cursorY != cl->screen->cursorY){
+ rfbRedrawAfterHideCursor(cl,updateRegion);
+ LOCK(cl->screen->cursorMutex);
+ cl->cursorX = cl->screen->cursorX;
+ cl->cursorY = cl->screen->cursorY;
+ UNLOCK(cl->screen->cursorMutex);
+ rfbRedrawAfterHideCursor(cl,updateRegion);
+      }
+      rfbShowCursor(cl);
+    }
+
+
+
+
+
+    rfbStatRecordMessageSent(cl, rfbFramebufferUpdate, 0, 0);
+    if (cl->preferredEncoding == rfbEncodingCoRRE){
+        nUpdateRegionRects = 0;
+
+        for(i = sraRgnGetIterator(updateRegion); sraRgnIteratorNext(i,&rect);){
+            int x = rect.x1;
+            int y = rect.y1;
+            int w = rect.x2 - x;
+            int h = rect.y2 - y;
+     int rectsPerRow, rows;
+
+            if (cl->screen!=cl->scaledScreen)
+                rfbScaledCorrection(cl->screen, cl->scaledScreen, &x, &y, &w, &h, "rfbSendFramebufferUpdate");
+     rectsPerRow = (w-1)/cl->correMaxWidth+1;
+     rows = (h-1)/cl->correMaxHeight+1;
+     nUpdateRegionRects += rectsPerRow*rows;
+        }
+ sraRgnReleaseIterator(i); i=NULL;
+    } else if (cl->preferredEncoding == rfbEncodingUltra){
+        nUpdateRegionRects = 0;
+
+        for(i = sraRgnGetIterator(updateRegion); sraRgnIteratorNext(i,&rect);){
+            int x = rect.x1;
+            int y = rect.y1;
+            int w = rect.x2 - x;
+            int h = rect.y2 - y;
+
+            if (cl->screen!=cl->scaledScreen)
+                rfbScaledCorrection(cl->screen, cl->scaledScreen, &x, &y, &w, &h, "rfbSendFramebufferUpdate");
+            nUpdateRegionRects += (((h-1) / (ULTRA_MAX_SIZE( w ) / w)) + 1);
+          }
+        sraRgnReleaseIterator(i); i=NULL;
+#ifdef LIBVNCSERVER_HAVE_LIBZ
+    } else if (cl->preferredEncoding == rfbEncodingZlib){
+ nUpdateRegionRects = 0;
+
+        for(i = sraRgnGetIterator(updateRegion); sraRgnIteratorNext(i,&rect);){
+            int x = rect.x1;
+            int y = rect.y1;
+            int w = rect.x2 - x;
+            int h = rect.y2 - y;
+
+            if (cl->screen!=cl->scaledScreen)
+                rfbScaledCorrection(cl->screen, cl->scaledScreen, &x, &y, &w, &h, "rfbSendFramebufferUpdate");
+     nUpdateRegionRects += (((h-1) / (ZLIB_MAX_SIZE( w ) / w)) + 1);
+ }
+ sraRgnReleaseIterator(i); i=NULL;
+#ifdef LIBVNCSERVER_HAVE_LIBJPEG
+    } else if (cl->preferredEncoding == rfbEncodingTight){
+ nUpdateRegionRects = 0;
+
+        for(i = sraRgnGetIterator(updateRegion); sraRgnIteratorNext(i,&rect);){
+            int x = rect.x1;
+            int y = rect.y1;
+            int w = rect.x2 - x;
+            int h = rect.y2 - y;
+            int n;
+
+            if (cl->screen!=cl->scaledScreen)
+                rfbScaledCorrection(cl->screen, cl->scaledScreen, &x, &y, &w, &h, "rfbSendFramebufferUpdate");
+     n = rfbNumCodedRectsTight(cl, x, y, w, h);
+     if (n == 0){
+  nUpdateRegionRects = 0xFFFF;
+  break;
+     }
+     nUpdateRegionRects += n;
+ }
+ sraRgnReleaseIterator(i); i=NULL;
+#endif
+#endif
+#if defined(LIBVNCSERVER_HAVE_LIBJPEG) && defined(LIBVNCSERVER_HAVE_LIBPNG)
+    } else if (cl->preferredEncoding == rfbEncodingTightPng){
+ nUpdateRegionRects = 0;
+
+        for(i = sraRgnGetIterator(updateRegion); sraRgnIteratorNext(i,&rect);){
+            int x = rect.x1;
+            int y = rect.y1;
+            int w = rect.x2 - x;
+            int h = rect.y2 - y;
+            int n;
+
+            if (cl->screen!=cl->scaledScreen)
+                rfbScaledCorrection(cl->screen, cl->scaledScreen, &x, &y, &w, &h, "rfbSendFramebufferUpdate");
+     n = rfbNumCodedRectsTight(cl, x, y, w, h);
+     if (n == 0){
+  nUpdateRegionRects = 0xFFFF;
+  break;
+     }
+     nUpdateRegionRects += n;
+ }
+ sraRgnReleaseIterator(i); i=NULL;
+#endif
+    } else{
+        nUpdateRegionRects = sraRgnCountRects(updateRegion);
+    }
+
+    fu->type = rfbFramebufferUpdate;
+    if (nUpdateRegionRects != 0xFFFF){
+ if(cl->screen->maxRectsPerUpdate>0
+
+    && cl->preferredEncoding != rfbEncodingCoRRE
+
+           && cl->preferredEncoding != rfbEncodingUltra
+#ifdef LIBVNCSERVER_HAVE_LIBZ
+
+    && cl->preferredEncoding != rfbEncodingZlib
+#ifdef LIBVNCSERVER_HAVE_LIBJPEG
+
+    && cl->preferredEncoding != rfbEncodingTight
+#endif
+#endif
+#ifdef LIBVNCSERVER_HAVE_LIBPNG
+
+    && cl->preferredEncoding != rfbEncodingTightPng
+#endif
+    && nUpdateRegionRects>cl->screen->maxRectsPerUpdate){
+     sraRegion* newUpdateRegion = sraRgnBBox(updateRegion);
+     sraRgnDestroy(updateRegion);
+     updateRegion = newUpdateRegion;
+     nUpdateRegionRects = sraRgnCountRects(updateRegion);
+ }
+ fu->nRects = Swap16IfLE((uint16_t)(sraRgnCountRects(updateCopyRegion) +
+        nUpdateRegionRects +
+        !!sendCursorShape + !!sendCursorPos + !!sendKeyboardLedState +
+        !!sendSupportedMessages + !!sendSupportedEncodings + !!sendServerIdentity));
+    } else{
+ fu->nRects = 0xFFFF;
+    }
+    cl->ublen = sz_rfbFramebufferUpdateMsg;
+
+   if (sendCursorShape){
+ cl->cursorWasChanged = FALSE;
+ if (!rfbSendCursorShape(cl))
+     goto updateFailed;
+    }
+
+   if (sendCursorPos){
+ cl->cursorWasMoved = FALSE;
+ if (!rfbSendCursorPos(cl))
+         goto updateFailed;
+   }
+
+   if (sendKeyboardLedState){
+       if (!rfbSendKeyboardLedState(cl))
+           goto updateFailed;
+   }
+
+   if (sendSupportedMessages){
+       if (!rfbSendSupportedMessages(cl))
+           goto updateFailed;
+   }
+   if (sendSupportedEncodings){
+       if (!rfbSendSupportedEncodings(cl))
+           goto updateFailed;
+   }
+   if (sendServerIdentity){
+       if (!rfbSendServerIdentity(cl))
+           goto updateFailed;
+   }
+
+    if (!sraRgnEmpty(updateCopyRegion)){
+ if (!rfbSendCopyRegion(cl,updateCopyRegion,dx,dy))
+         goto updateFailed;
+    }
+
+    for(i = sraRgnGetIterator(updateRegion); sraRgnIteratorNext(i,&rect);){
+        int x = rect.x1;
+        int y = rect.y1;
+        int w = rect.x2 - x;
+        int h = rect.y2 - y;
+
+
+        if (cl->screen!=cl->scaledScreen)
+            rfbScaledCorrection(cl->screen, cl->scaledScreen, &x, &y, &w, &h, "rfbSendFramebufferUpdate");
+
+        switch (cl->preferredEncoding){
+ case -1:
+        case rfbEncodingRaw:
+            if (!rfbSendRectEncodingRaw(cl, x, y, w, h))
+         goto updateFailed;
+            break;
+        case rfbEncodingRRE:
+            if (!rfbSendRectEncodingRRE(cl, x, y, w, h))
+         goto updateFailed;
+            break;
+        case rfbEncodingCoRRE:
+            if (!rfbSendRectEncodingCoRRE(cl, x, y, w, h))
+         goto updateFailed;
+     break;
+        case rfbEncodingHextile:
+            if (!rfbSendRectEncodingHextile(cl, x, y, w, h))
+         goto updateFailed;
+            break;
+        case rfbEncodingUltra:
+            if (!rfbSendRectEncodingUltra(cl, x, y, w, h))
+                goto updateFailed;
+            break;
+#ifdef LIBVNCSERVER_HAVE_LIBZ
+ case rfbEncodingZlib:
+     if (!rfbSendRectEncodingZlib(cl, x, y, w, h))
+         goto updateFailed;
+     break;
+       case rfbEncodingZRLE:
+       case rfbEncodingZYWRLE:
+           if (!rfbSendRectEncodingZRLE(cl, x, y, w, h))
+        goto updateFailed;
+           break;
+#endif
+#if defined(LIBVNCSERVER_HAVE_LIBJPEG) && (defined(LIBVNCSERVER_HAVE_LIBZ) || defined(LIBVNCSERVER_HAVE_LIBPNG))
+ case rfbEncodingTight:
+     if (!rfbSendRectEncodingTight(cl, x, y, w, h))
+         goto updateFailed;
+     break;
+#ifdef LIBVNCSERVER_HAVE_LIBPNG
+ case rfbEncodingTightPng:
+     if (!rfbSendRectEncodingTightPng(cl, x, y, w, h))
+         goto updateFailed;
+     break;
+#endif
+#endif
+        }
+    }
+    if (i){
+        sraRgnReleaseIterator(i);
+        i = NULL;
+    }
+
+    if ( nUpdateRegionRects == 0xFFFF &&
+  !rfbSendLastRectMarker(cl) )
+     goto updateFailed;
+
+    if (!rfbSendUpdateBuf(cl)){
+updateFailed:
+ result = FALSE;
+    }
+
+    if (!cl->enableCursorShapeUpdates){
+      rfbHideCursor(cl);
+    }
+
+    if(i)
+        sraRgnReleaseIterator(i);
+    sraRgnDestroy(updateRegion);
+    sraRgnDestroy(updateCopyRegion);
+
+    if(cl->screen->displayFinishedHook)
+      cl->screen->displayFinishedHook(cl, result);
+    return result;
+}

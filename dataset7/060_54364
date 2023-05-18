@@ -1,0 +1,16 @@
+node_equal(wordnode_T *n1, wordnode_T *n2){
+    wordnode_T *p1;
+    wordnode_T *p2;
+
+    for (p1 = n1, p2 = n2; p1 != NULL && p2 != NULL;
+         p1 = p1->wn_sibling, p2 = p2->wn_sibling)
+ if (p1->wn_byte != p2->wn_byte
+  || (p1->wn_byte == NUL
+      ? (p1->wn_flags != p2->wn_flags
+   || p1->wn_region != p2->wn_region
+   || p1->wn_affixID != p2->wn_affixID)
+      : (p1->wn_child != p2->wn_child)))
+     break;
+
+    return p1 == NULL && p2 == NULL;
+}

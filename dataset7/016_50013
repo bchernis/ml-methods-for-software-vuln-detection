@@ -1,0 +1,161 @@
+int32_t WelsDecodeBs (PWelsDecoderContext pCtx, const uint8_t* kpBsBuf, const int32_t kiBsLen,
+                      uint8_t** ppDst, SBufferInfo* pDstBufInfo){
+  if (!pCtx->bEndOfStreamFlag){
+    SDataBuffer* pRawData = &pCtx->sRawData;
+
+    int32_t iSrcIdx = 0;
+    int32_t iSrcConsumed = 0;
+    int32_t iDstIdx = 0;
+    int32_t iSrcLength = 0;
+    int32_t iRet = 0;
+    int32_t iConsumedBytes = 0;
+    int32_t iOffset = 0;
+
+    uint8_t* pSrcNal = NULL;
+    uint8_t* pDstNal = NULL;
+    uint8_t* pNalPayload = NULL;
+
+
+    if (NULL == DetectStartCodePrefix (kpBsBuf, &iOffset,
+                                       kiBsLen)){
+      return dsBitstreamError;
+    }
+
+    pSrcNal = const_cast<uint8_t*> (kpBsBuf) + iOffset;
+    iSrcLength = kiBsLen - iOffset;
+
+    if ((kiBsLen + 4) > (pRawData->pEnd - pRawData->pCurPos)){
+      pRawData->pCurPos = pRawData->pHead;
+    }
+
+
+
+
+    pDstNal = pRawData->pCurPos;
+
+    while (iSrcConsumed < iSrcLength){
+      if ((2 + iSrcConsumed < iSrcLength) &&
+          (0 == LD16 (pSrcNal + iSrcIdx)) &&
+          ((pSrcNal[2 + iSrcIdx] == 0x03) || (pSrcNal[2 + iSrcIdx] == 0x01))){
+        if (pSrcNal[2 + iSrcIdx] == 0x03){
+          ST16 (pDstNal + iDstIdx, 0);
+          iDstIdx += 2;
+          iSrcIdx += 3;
+          iSrcConsumed += 3;
+        } else{
+
+          iConsumedBytes = 0;
+          pNalPayload = ParseNalHeader (pCtx, &pCtx->sCurNalHead, pDstNal, iDstIdx, pSrcNal - 3, iSrcIdx + 3, &iConsumedBytes);
+          if (IS_PARAM_SETS_NALS (pCtx->sCurNalHead.eNalUnitType) && pNalPayload){
+            iRet = ParseNonVclNal (pCtx, pNalPayload, iDstIdx - iConsumedBytes);
+          }
+          if (pCtx->bAuReadyFlag){
+            ConstructAccessUnit (pCtx, ppDst, pDstBufInfo);
+
+            if ((dsOutOfMemory | dsNoParamSets) & pCtx->iErrorCode){
+#ifdef LONG_TERM_REF
+              pCtx->bParamSetsLostFlag = true;
+#else
+              pCtx->bReferenceLostAtT0Flag = true;
+#endif
+              ResetParameterSetsState (pCtx);
+
+              if (dsOutOfMemory & pCtx->iErrorCode){
+                return pCtx->iErrorCode;
+              }
+            }
+          }
+          if (iRet){
+            iRet = 0;
+            if (dsNoParamSets & pCtx->iErrorCode){
+#ifdef LONG_TERM_REF
+              pCtx->bParamSetsLostFlag = true;
+#else
+              pCtx->bReferenceLostAtT0Flag = true;
+#endif
+              ResetParameterSetsState (pCtx);
+            }
+            return pCtx->iErrorCode;
+          }
+
+          pDstNal += iDstIdx;
+          if ((iSrcLength - iSrcConsumed + 4) > (pRawData->pEnd - pDstNal)){
+            pRawData->pCurPos = pRawData->pHead;
+          } else{
+            pRawData->pCurPos = pDstNal;
+          }
+          pDstNal = pRawData->pCurPos + 4;
+
+          pSrcNal += iSrcIdx + 3;
+          iSrcConsumed += 3;
+          iSrcIdx = 0;
+          iDstIdx = 0;
+        }
+        continue;
+      }
+      pDstNal[iDstIdx++] = pSrcNal[iSrcIdx++];
+      iSrcConsumed++;
+    }
+
+
+
+    iConsumedBytes = 0;
+    pNalPayload = ParseNalHeader (pCtx, &pCtx->sCurNalHead, pDstNal, iDstIdx, pSrcNal - 3, iSrcIdx + 3, &iConsumedBytes);
+    if ((pCtx->iErrorConMethod != ERROR_CON_DISABLE) && (IS_VCL_NAL (pCtx->sCurNalHead.eNalUnitType, 1))){
+      CheckAndDoEC (pCtx, ppDst, pDstBufInfo);
+    }
+    if (IS_PARAM_SETS_NALS (pCtx->sCurNalHead.eNalUnitType) && pNalPayload){
+      iRet = ParseNonVclNal (pCtx, pNalPayload, iDstIdx - iConsumedBytes);
+    }
+    if (pCtx->bAuReadyFlag){
+      ConstructAccessUnit (pCtx, ppDst, pDstBufInfo);
+
+      if ((dsOutOfMemory | dsNoParamSets) & pCtx->iErrorCode){
+#ifdef LONG_TERM_REF
+        pCtx->bParamSetsLostFlag = true;
+#else
+        pCtx->bReferenceLostAtT0Flag = true;
+#endif
+        ResetParameterSetsState (pCtx);
+        return pCtx->iErrorCode;
+      }
+    }
+    if (iRet){
+      iRet = 0;
+      if (dsNoParamSets & pCtx->iErrorCode){
+#ifdef LONG_TERM_REF
+        pCtx->bParamSetsLostFlag = true;
+#else
+        pCtx->bReferenceLostAtT0Flag = true;
+#endif
+        ResetParameterSetsState (pCtx);
+      }
+      return pCtx->iErrorCode;
+    }
+    pDstNal += iDstIdx;
+    pRawData->pCurPos = pDstNal;
+  } else{
+    PAccessUnit pCurAu =
+      pCtx->pAccessUnitList;
+
+    if (pCurAu->uiAvailUnitsNum == 0){
+      return pCtx->iErrorCode;
+    } else{
+      pCtx->pAccessUnitList->uiEndPos = pCtx->pAccessUnitList->uiAvailUnitsNum - 1;
+
+      ConstructAccessUnit (pCtx, ppDst, pDstBufInfo);
+
+      if ((dsOutOfMemory | dsNoParamSets) & pCtx->iErrorCode){
+#ifdef LONG_TERM_REF
+        pCtx->bParamSetsLostFlag = true;
+#else
+        pCtx->bReferenceLostAtT0Flag = true;
+#endif
+        ResetParameterSetsState (pCtx);
+        return pCtx->iErrorCode;
+      }
+    }
+  }
+
+  return pCtx->iErrorCode;
+}

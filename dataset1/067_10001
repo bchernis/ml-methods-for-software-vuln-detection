@@ -1,0 +1,82 @@
+int32_t WelsRequestMem (PWelsDecoderContext pCtx, const int32_t kiMbWidth, const int32_t kiMbHeight){
+  const int32_t kiPicWidth = kiMbWidth << 4;
+  const int32_t kiPicHeight = kiMbHeight << 4;
+  int32_t iErr = ERR_NONE;
+
+  int32_t iListIdx = 0;
+  int32_t iPicQueueSize = 0;
+  bool bNeedChangePicQueue = true;
+
+  WELS_VERIFY_RETURN_IF (ERR_INFO_INVALID_PARAM, (NULL == pCtx || kiPicWidth <= 0 || kiPicHeight <= 0))
+
+
+
+  iPicQueueSize = GetTargetRefListSize (pCtx);
+  pCtx->iPicQueueNumber = iPicQueueSize;
+  if (pCtx->pPicBuff[LIST_0] != NULL
+      && pCtx->pPicBuff[LIST_0]->iCapacity ==
+      iPicQueueSize)
+    bNeedChangePicQueue = false;
+
+  WELS_VERIFY_RETURN_IF (ERR_NONE, pCtx->bHaveGotMemory && (kiPicWidth == pCtx->iImgWidthInPixel
+                         && kiPicHeight == pCtx->iImgHeightInPixel) && (!bNeedChangePicQueue))
+
+
+  WelsResetRefPic (pCtx);
+
+
+  for (iListIdx = LIST_0; iListIdx < LIST_A; ++ iListIdx){
+    PPicBuff* ppPic = &pCtx->pPicBuff[iListIdx];
+    if (NULL != ppPic && NULL != *ppPic){
+      DestroyPicBuff (ppPic);
+    }
+  }
+
+
+  iErr = CreatePicBuff (pCtx, &pCtx->pPicBuff[LIST_0], iPicQueueSize, kiPicWidth, kiPicHeight);
+  if (iErr != ERR_NONE)
+    return iErr;
+
+static int complete_emulated_mmio(struct kvm_vcpu *vcpu){
+ struct kvm_run *run = vcpu->run;
+ struct kvm_mmio_fragment *frag;
+ unsigned len;
+
+ BUG_ON(!vcpu->mmio_needed);
+
+
+ frag = &vcpu->mmio_fragments[vcpu->mmio_cur_fragment];
+ len = min(8u, frag->len);
+ if (!vcpu->mmio_is_write)
+  memcpy(frag->data, run->mmio.data, len);
+
+ if (frag->len <= 8){
+
+  frag++;
+  vcpu->mmio_cur_fragment++;
+ } else{
+
+  frag->data += len;
+  frag->gpa += len;
+  frag->len -= len;
+ }
+
+ if (vcpu->mmio_cur_fragment == vcpu->mmio_nr_fragments){
+  vcpu->mmio_needed = 0;
+
+
+  if (vcpu->mmio_is_write)
+   return 1;
+  vcpu->mmio_read_completed = 1;
+  return complete_emulated_io(vcpu);
+ }
+
+ run->exit_reason = KVM_EXIT_MMIO;
+ run->mmio.phys_addr = frag->gpa;
+ if (vcpu->mmio_is_write)
+  memcpy(run->mmio.data, frag->data, min(8u, frag->len));
+ run->mmio.len = min(8u, frag->len);
+ run->mmio.is_write = vcpu->mmio_is_write;
+ vcpu->arch.complete_userspace_io = complete_emulated_mmio;
+ return 0;
+}

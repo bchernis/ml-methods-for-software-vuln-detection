@@ -1,0 +1,15 @@
+static void addstr(char *src){
+ char c;
+ if (Sptr > Sbuf) Sptr--;
+ do{
+  do{c = *Sptr++ = *src++;} while (c && (Sptr < Send));
+  if (c){
+   long sz = Send - Sbuf;
+   long off = Sptr - Sbuf;
+   sz *= 2;
+   Sbuf = (char*)realloc(Sbuf,sz);
+   Send = Sbuf + sz;
+   Sptr = Sbuf + off;
+  }
+ } while (c);
+}

@@ -1,0 +1,37 @@
+void WelsDecoderDefaults (PWelsDecoderContext pCtx, SLogContext* pLogCtx){
+  int32_t iCpuCores = 1;
+  memset (pCtx, 0, sizeof (SWelsDecoderContext));
+  pCtx->sLogCtx = *pLogCtx;
+
+  pCtx->pArgDec = NULL;
+
+  pCtx->iOutputColorFormat = videoFormatI420;
+  pCtx->bHaveGotMemory = false;
+  pCtx->uiCpuFlag = 0;
+
+  pCtx->bAuReadyFlag = 0;
+
+
+  pCtx->uiCpuFlag = WelsCPUFeatureDetect (&iCpuCores);
+
+  pCtx->iImgWidthInPixel = 0;
+  pCtx->iImgHeightInPixel = 0;
+
+  pCtx->iFrameNum = -1;
+  pCtx->iPrevFrameNum = -1;
+  pCtx->iErrorCode = ERR_NONE;
+
+  pCtx->pDec = NULL;
+
+  WelsResetRefPic (pCtx);
+
+  pCtx->iActiveFmoNum = 0;
+
+  pCtx->pPicBuff[LIST_0] = NULL;
+  pCtx->pPicBuff[LIST_1] = NULL;
+
+  pCtx->bAvcBasedFlag = true;
+  pCtx->iErrorConMethod = ERROR_CON_SLICE_COPY;
+  pCtx->pPreviousDecodedPictureInDpb = NULL;
+
+}

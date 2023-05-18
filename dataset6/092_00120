@@ -1,0 +1,4 @@
+reap_all (void){
+  while (0 < nprocs)
+    reap (-1);
+}

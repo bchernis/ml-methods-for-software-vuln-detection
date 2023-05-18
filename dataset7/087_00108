@@ -1,0 +1,4 @@
+sort_die (char const *message, char const *file){
+  die (SORT_FAILURE, errno, "%s: %s", message,
+       quotef (file ? file : _("standard output")));
+}

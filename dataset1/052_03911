@@ -1,0 +1,18 @@
+PHP_FUNCTION(imageinterlace){
+ zval *IM;
+ int argc = ZEND_NUM_ARGS();
+ long INT = 0;
+ gdImagePtr im;
+
+ if (zend_parse_parameters(argc TSRMLS_CC, "r|l", &IM, &INT) == FAILURE){
+  return;
+ }
+
+ ZEND_FETCH_RESOURCE(im, gdImagePtr, &IM, -1, "Image", le_gd);
+
+ if (argc > 1){
+  gdImageInterlace(im, INT);
+ }
+
+ RETURN_LONG(gdImageGetInterlaced(im));
+}

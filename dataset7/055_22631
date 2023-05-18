@@ -1,0 +1,721 @@
+static int tg3_get_invariants(struct tg3 *tp, const struct pci_device_id *ent){
+ u32 misc_ctrl_reg;
+ u32 pci_state_reg, grc_misc_cfg;
+ u32 val;
+ u16 pci_cmd;
+ int err;
+# 15143 "originals/41a.c"
+ pci_read_config_word(tp->pdev, PCI_COMMAND, &pci_cmd);
+ pci_cmd &= ~PCI_COMMAND_INVALIDATE;
+ pci_write_config_word(tp->pdev, PCI_COMMAND, pci_cmd);
+
+
+
+
+
+
+ pci_read_config_dword(tp->pdev, TG3PCI_MISC_HOST_CTRL,
+         &misc_ctrl_reg);
+ tp->misc_host_ctrl |= (misc_ctrl_reg &
+          MISC_HOST_CTRL_CHIPREV);
+ pci_write_config_dword(tp->pdev, TG3PCI_MISC_HOST_CTRL,
+          tp->misc_host_ctrl);
+
+ tg3_detect_asic_rev(tp, misc_ctrl_reg);
+# 15178 "originals/41a.c"
+ if ((tg3_chip_rev_id(tp) == CHIPREV_ID_5703_A1) ||
+     (tg3_chip_rev_id(tp) == CHIPREV_ID_5703_A2)){
+  static struct tg3_dev_id{
+   u32 vendor;
+   u32 device;
+   u32 rev;
+  } ich_chipsets[] ={{ PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82801AA_8,
+     PCI_ANY_ID },{ PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82801AB_8,
+     PCI_ANY_ID },{ PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82801BA_11,
+     0xa },{ PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82801BA_6,
+     PCI_ANY_ID },{ },
+  };
+  struct tg3_dev_id *pci_id = &ich_chipsets[0];
+  struct pci_dev *bridge = NULL;
+
+  while (pci_id->vendor != 0){
+   bridge = pci_get_device(pci_id->vendor, pci_id->device,
+      bridge);
+   if (!bridge){
+    pci_id++;
+    continue;
+   }
+   if (pci_id->rev != PCI_ANY_ID){
+    if (bridge->revision > pci_id->rev)
+     continue;
+   }
+   if (bridge->subordinate &&
+       (bridge->subordinate->number ==
+        tp->pdev->bus->number)){
+    tg3_flag_set(tp, ICH_WORKAROUND);
+    pci_dev_put(bridge);
+    break;
+   }
+  }
+ }
+
+ if (tg3_asic_rev(tp) == ASIC_REV_5701){
+  static struct tg3_dev_id{
+   u32 vendor;
+   u32 device;
+  } bridge_chipsets[] ={{ PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_PXH_0 },{ PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_PXH_1 },{ },
+  };
+  struct tg3_dev_id *pci_id = &bridge_chipsets[0];
+  struct pci_dev *bridge = NULL;
+
+  while (pci_id->vendor != 0){
+   bridge = pci_get_device(pci_id->vendor,
+      pci_id->device,
+      bridge);
+   if (!bridge){
+    pci_id++;
+    continue;
+   }
+   if (bridge->subordinate &&
+       (bridge->subordinate->number <=
+        tp->pdev->bus->number) &&
+       (bridge->subordinate->busn_res.end >=
+        tp->pdev->bus->number)){
+    tg3_flag_set(tp, 5701_DMA_BUG);
+    pci_dev_put(bridge);
+    break;
+   }
+  }
+ }
+
+
+
+
+
+
+
+ if (tg3_flag(tp, 5780_CLASS)){
+  tg3_flag_set(tp, 40BIT_DMA_BUG);
+  tp->msi_cap = pci_find_capability(tp->pdev, PCI_CAP_ID_MSI);
+ } else{
+  struct pci_dev *bridge = NULL;
+
+  do{
+   bridge = pci_get_device(PCI_VENDOR_ID_SERVERWORKS,
+      PCI_DEVICE_ID_SERVERWORKS_EPB,
+      bridge);
+   if (bridge && bridge->subordinate &&
+       (bridge->subordinate->number <=
+        tp->pdev->bus->number) &&
+       (bridge->subordinate->busn_res.end >=
+        tp->pdev->bus->number)){
+    tg3_flag_set(tp, 40BIT_DMA_BUG);
+    pci_dev_put(bridge);
+    break;
+   }
+  } while (bridge);
+ }
+
+ if (tg3_asic_rev(tp) == ASIC_REV_5704 ||
+     tg3_asic_rev(tp) == ASIC_REV_5714)
+  tp->pdev_peer = tg3_find_peer(tp);
+
+
+ if (tg3_chip_rev_id(tp) == CHIPREV_ID_5719_A0)
+  ;
+ else if (tg3_flag(tp, 57765_PLUS))
+  tg3_flag_set(tp, HW_TSO_3);
+ else if (tg3_flag(tp, 5755_PLUS) ||
+   tg3_asic_rev(tp) == ASIC_REV_5906)
+  tg3_flag_set(tp, HW_TSO_2);
+ else if (tg3_flag(tp, 5750_PLUS)){
+  tg3_flag_set(tp, HW_TSO_1);
+  tg3_flag_set(tp, TSO_BUG);
+  if (tg3_asic_rev(tp) == ASIC_REV_5750 &&
+      tg3_chip_rev_id(tp) >= CHIPREV_ID_5750_C2)
+   tg3_flag_clear(tp, TSO_BUG);
+ } else if (tg3_asic_rev(tp) != ASIC_REV_5700 &&
+     tg3_asic_rev(tp) != ASIC_REV_5701 &&
+     tg3_chip_rev_id(tp) != CHIPREV_ID_5705_A0){
+   tg3_flag_set(tp, TSO_BUG);
+  if (tg3_asic_rev(tp) == ASIC_REV_5705)
+   tp->fw_needed = FIRMWARE_TG3TSO5;
+  else
+   tp->fw_needed = FIRMWARE_TG3TSO;
+ }
+
+
+ if (tg3_flag(tp, HW_TSO_1) ||
+     tg3_flag(tp, HW_TSO_2) ||
+     tg3_flag(tp, HW_TSO_3) ||
+     tp->fw_needed){
+
+
+
+
+  tg3_flag_set(tp, TSO_CAPABLE);
+ } else{
+  tg3_flag_clear(tp, TSO_CAPABLE);
+  tg3_flag_clear(tp, TSO_BUG);
+  tp->fw_needed = NULL;
+ }
+
+ if (tg3_chip_rev_id(tp) == CHIPREV_ID_5701_A0)
+  tp->fw_needed = FIRMWARE_TG3;
+
+ tp->irq_max = 1;
+
+ if (tg3_flag(tp, 5750_PLUS)){
+  tg3_flag_set(tp, SUPPORT_MSI);
+  if (tg3_chip_rev(tp) == CHIPREV_5750_AX ||
+      tg3_chip_rev(tp) == CHIPREV_5750_BX ||
+      (tg3_asic_rev(tp) == ASIC_REV_5714 &&
+       tg3_chip_rev_id(tp) <= CHIPREV_ID_5714_A2 &&
+       tp->pdev_peer == tp->pdev))
+   tg3_flag_clear(tp, SUPPORT_MSI);
+
+  if (tg3_flag(tp, 5755_PLUS) ||
+      tg3_asic_rev(tp) == ASIC_REV_5906){
+   tg3_flag_set(tp, 1SHOT_MSI);
+  }
+
+  if (tg3_flag(tp, 57765_PLUS)){
+   tg3_flag_set(tp, SUPPORT_MSIX);
+   tp->irq_max = TG3_IRQ_MAX_VECS;
+  }
+ }
+
+ tp->txq_max = 1;
+ tp->rxq_max = 1;
+ if (tp->irq_max > 1){
+  tp->rxq_max = TG3_RSS_MAX_NUM_QS;
+  tg3_rss_init_dflt_indir_tbl(tp, TG3_RSS_MAX_NUM_QS);
+
+  if (tg3_asic_rev(tp) == ASIC_REV_5719 ||
+      tg3_asic_rev(tp) == ASIC_REV_5720)
+   tp->txq_max = tp->irq_max - 1;
+ }
+
+ if (tg3_flag(tp, 5755_PLUS) ||
+     tg3_asic_rev(tp) == ASIC_REV_5906)
+  tg3_flag_set(tp, SHORT_DMA_BUG);
+
+ if (tg3_asic_rev(tp) == ASIC_REV_5719)
+  tp->dma_limit = TG3_TX_BD_DMA_MAX_4K;
+
+ if (tg3_asic_rev(tp) == ASIC_REV_5717 ||
+     tg3_asic_rev(tp) == ASIC_REV_5719 ||
+     tg3_asic_rev(tp) == ASIC_REV_5720 ||
+     tg3_asic_rev(tp) == ASIC_REV_5762)
+  tg3_flag_set(tp, LRG_PROD_RING_CAP);
+
+ if (tg3_flag(tp, 57765_PLUS) &&
+     tg3_chip_rev_id(tp) != CHIPREV_ID_5719_A0)
+  tg3_flag_set(tp, USE_JUMBO_BDFLAG);
+
+ if (!tg3_flag(tp, 5705_PLUS) ||
+     tg3_flag(tp, 5780_CLASS) ||
+     tg3_flag(tp, USE_JUMBO_BDFLAG))
+  tg3_flag_set(tp, JUMBO_CAPABLE);
+
+ pci_read_config_dword(tp->pdev, TG3PCI_PCISTATE,
+         &pci_state_reg);
+
+ if (pci_is_pcie(tp->pdev)){
+  u16 lnkctl;
+
+  tg3_flag_set(tp, PCI_EXPRESS);
+
+  pcie_capability_read_word(tp->pdev, PCI_EXP_LNKCTL, &lnkctl);
+  if (lnkctl & PCI_EXP_LNKCTL_CLKREQ_EN){
+   if (tg3_asic_rev(tp) == ASIC_REV_5906){
+    tg3_flag_clear(tp, HW_TSO_2);
+    tg3_flag_clear(tp, TSO_CAPABLE);
+   }
+   if (tg3_asic_rev(tp) == ASIC_REV_5784 ||
+       tg3_asic_rev(tp) == ASIC_REV_5761 ||
+       tg3_chip_rev_id(tp) == CHIPREV_ID_57780_A0 ||
+       tg3_chip_rev_id(tp) == CHIPREV_ID_57780_A1)
+    tg3_flag_set(tp, CLKREQ_BUG);
+  } else if (tg3_chip_rev_id(tp) == CHIPREV_ID_5717_A0){
+   tg3_flag_set(tp, L1PLLPD_EN);
+  }
+ } else if (tg3_asic_rev(tp) == ASIC_REV_5785){
+
+
+
+
+  tg3_flag_set(tp, PCI_EXPRESS);
+ } else if (!tg3_flag(tp, 5705_PLUS) ||
+     tg3_flag(tp, 5780_CLASS)){
+  tp->pcix_cap = pci_find_capability(tp->pdev, PCI_CAP_ID_PCIX);
+  if (!tp->pcix_cap){
+   dev_err(&tp->pdev->dev,
+    "Cannot find PCI-X capability, aborting\n");
+   return -EIO;
+  }
+
+  if (!(pci_state_reg & PCISTATE_CONV_PCI_MODE))
+   tg3_flag_set(tp, PCIX_MODE);
+ }
+
+
+
+
+
+
+
+ if (pci_dev_present(tg3_write_reorder_chipsets) &&
+     !tg3_flag(tp, PCI_EXPRESS))
+  tg3_flag_set(tp, MBOX_WRITE_REORDER);
+
+ pci_read_config_byte(tp->pdev, PCI_CACHE_LINE_SIZE,
+        &tp->pci_cacheline_sz);
+ pci_read_config_byte(tp->pdev, PCI_LATENCY_TIMER,
+        &tp->pci_lat_timer);
+ if (tg3_asic_rev(tp) == ASIC_REV_5703 &&
+     tp->pci_lat_timer < 64){
+  tp->pci_lat_timer = 64;
+  pci_write_config_byte(tp->pdev, PCI_LATENCY_TIMER,
+          tp->pci_lat_timer);
+ }
+
+
+
+
+ if (tg3_chip_rev(tp) == CHIPREV_5700_BX){
+
+
+
+  tg3_flag_set(tp, TXD_MBOX_HWBUG);
+
+
+
+
+
+
+  if (tg3_flag(tp, PCIX_MODE)){
+   u32 pm_reg;
+
+   tg3_flag_set(tp, PCIX_TARGET_HWBUG);
+
+
+
+
+
+   pci_read_config_dword(tp->pdev,
+           tp->pm_cap + PCI_PM_CTRL,
+           &pm_reg);
+   pm_reg &= ~PCI_PM_CTRL_STATE_MASK;
+   pm_reg |= PCI_PM_CTRL_PME_ENABLE | 0 ;
+   pci_write_config_dword(tp->pdev,
+            tp->pm_cap + PCI_PM_CTRL,
+            pm_reg);
+
+
+   pci_read_config_word(tp->pdev, PCI_COMMAND, &pci_cmd);
+   pci_cmd |= PCI_COMMAND_PARITY | PCI_COMMAND_SERR;
+   pci_write_config_word(tp->pdev, PCI_COMMAND, pci_cmd);
+  }
+ }
+
+ if ((pci_state_reg & PCISTATE_BUS_SPEED_HIGH) != 0)
+  tg3_flag_set(tp, PCI_HIGH_SPEED);
+ if ((pci_state_reg & PCISTATE_BUS_32BIT) != 0)
+  tg3_flag_set(tp, PCI_32BIT);
+
+
+ if ((tg3_chip_rev_id(tp) == CHIPREV_ID_5704_A0) &&
+     (!(pci_state_reg & PCISTATE_RETRY_SAME_DMA))){
+  pci_state_reg |= PCISTATE_RETRY_SAME_DMA;
+  pci_write_config_dword(tp->pdev, TG3PCI_PCISTATE, pci_state_reg);
+ }
+
+
+ tp->read32 = tg3_read32;
+ tp->write32 = tg3_write32;
+ tp->read32_mbox = tg3_read32;
+ tp->write32_mbox = tg3_write32;
+ tp->write32_tx_mbox = tg3_write32;
+ tp->write32_rx_mbox = tg3_write32;
+
+
+ if (tg3_flag(tp, PCIX_TARGET_HWBUG))
+  tp->write32 = tg3_write_indirect_reg32;
+ else if (tg3_asic_rev(tp) == ASIC_REV_5701 ||
+   (tg3_flag(tp, PCI_EXPRESS) &&
+    tg3_chip_rev_id(tp) == CHIPREV_ID_5750_A0)){
+
+
+
+
+
+
+
+  tp->write32 = tg3_write_flush_reg32;
+ }
+
+ if (tg3_flag(tp, TXD_MBOX_HWBUG) || tg3_flag(tp, MBOX_WRITE_REORDER)){
+  tp->write32_tx_mbox = tg3_write32_tx_mbox;
+  if (tg3_flag(tp, MBOX_WRITE_REORDER))
+   tp->write32_rx_mbox = tg3_write_flush_reg32;
+ }
+
+ if (tg3_flag(tp, ICH_WORKAROUND)){
+  tp->read32 = tg3_read_indirect_reg32;
+  tp->write32 = tg3_write_indirect_reg32;
+  tp->read32_mbox = tg3_read_indirect_mbox;
+  tp->write32_mbox = tg3_write_indirect_mbox;
+  tp->write32_tx_mbox = tg3_write_indirect_mbox;
+  tp->write32_rx_mbox = tg3_write_indirect_mbox;
+
+  iounmap(tp->regs);
+  tp->regs = NULL;
+
+  pci_read_config_word(tp->pdev, PCI_COMMAND, &pci_cmd);
+  pci_cmd &= ~PCI_COMMAND_MEMORY;
+  pci_write_config_word(tp->pdev, PCI_COMMAND, pci_cmd);
+ }
+ if (tg3_asic_rev(tp) == ASIC_REV_5906){
+  tp->read32_mbox = tg3_read32_mbox_5906;
+  tp->write32_mbox = tg3_write32_mbox_5906;
+  tp->write32_tx_mbox = tg3_write32_mbox_5906;
+  tp->write32_rx_mbox = tg3_write32_mbox_5906;
+ }
+
+ if (tp->write32 == tg3_write_indirect_reg32 ||
+     (tg3_flag(tp, PCIX_MODE) &&
+      (tg3_asic_rev(tp) == ASIC_REV_5700 ||
+       tg3_asic_rev(tp) == ASIC_REV_5701)))
+  tg3_flag_set(tp, SRAM_USE_CONFIG);
+
+
+
+
+
+
+ val = tr32(MEMARB_MODE);
+ tw32(MEMARB_MODE, val | MEMARB_MODE_ENABLE);
+
+ tp->pci_fn = PCI_FUNC(tp->pdev->devfn) & 3;
+ if (tg3_asic_rev(tp) == ASIC_REV_5704 ||
+     tg3_flag(tp, 5780_CLASS)){
+  if (tg3_flag(tp, PCIX_MODE)){
+   pci_read_config_dword(tp->pdev,
+           tp->pcix_cap + PCI_X_STATUS,
+           &val);
+   tp->pci_fn = val & 0x7;
+  }
+ } else if (tg3_asic_rev(tp) == ASIC_REV_5717 ||
+     tg3_asic_rev(tp) == ASIC_REV_5719 ||
+     tg3_asic_rev(tp) == ASIC_REV_5720){
+  tg3_read_mem(tp, NIC_SRAM_CPMU_STATUS, &val);
+  if ((val & NIC_SRAM_CPMUSTAT_SIG_MSK) != NIC_SRAM_CPMUSTAT_SIG)
+   val = tr32(TG3_CPMU_STATUS);
+
+  if (tg3_asic_rev(tp) == ASIC_REV_5717)
+   tp->pci_fn = (val & TG3_CPMU_STATUS_FMSK_5717) ? 1 : 0;
+  else
+   tp->pci_fn = (val & TG3_CPMU_STATUS_FMSK_5719) >>
+         TG3_CPMU_STATUS_FSHFT_5719;
+ }
+
+ if (tg3_flag(tp, FLUSH_POSTED_WRITES)){
+  tp->write32_tx_mbox = tg3_write_flush_reg32;
+  tp->write32_rx_mbox = tg3_write_flush_reg32;
+ }
+# 15596 "originals/41a.c"
+ tg3_get_eeprom_hw_cfg(tp);
+
+ if (tp->fw_needed && tg3_flag(tp, ENABLE_ASF)){
+  tg3_flag_clear(tp, TSO_CAPABLE);
+  tg3_flag_clear(tp, TSO_BUG);
+  tp->fw_needed = NULL;
+ }
+
+ if (tg3_flag(tp, ENABLE_APE)){
+
+
+
+  pci_state_reg |= PCISTATE_ALLOW_APE_CTLSPC_WR |
+     PCISTATE_ALLOW_APE_SHMEM_WR |
+     PCISTATE_ALLOW_APE_PSPACE_WR;
+  pci_write_config_dword(tp->pdev, TG3PCI_PCISTATE,
+           pci_state_reg);
+
+  tg3_ape_lock_init(tp);
+ }
+
+
+
+
+
+
+ tp->grc_local_ctrl = GRC_LCLCTRL_INT_ON_ATTN | GRC_LCLCTRL_AUTO_SEEPROM;
+ if (tg3_asic_rev(tp) == ASIC_REV_5700 ||
+     tg3_flag(tp, EEPROM_WRITE_PROT))
+  tp->grc_local_ctrl |= (GRC_LCLCTRL_GPIO_OE1 |
+           GRC_LCLCTRL_GPIO_OUTPUT1);
+
+
+
+ else if (tg3_asic_rev(tp) == ASIC_REV_5752)
+  tp->grc_local_ctrl |= GRC_LCLCTRL_GPIO_OE3;
+
+ if (tg3_asic_rev(tp) == ASIC_REV_5755 ||
+     tg3_asic_rev(tp) == ASIC_REV_57780 ||
+     tg3_flag(tp, 57765_CLASS))
+  tp->grc_local_ctrl |= GRC_LCLCTRL_GPIO_UART_SEL;
+
+ if (tp->pdev->device == PCI_DEVICE_ID_TIGON3_5761 ||
+     tp->pdev->device == TG3PCI_DEVICE_TIGON3_5761S){
+
+  tp->grc_local_ctrl |= GRC_LCLCTRL_GPIO_UART_SEL;
+  if (tg3_flag(tp, IS_NIC))
+
+   tp->grc_local_ctrl |= GRC_LCLCTRL_GPIO_OE0 |
+           GRC_LCLCTRL_GPIO_OUTPUT0;
+ }
+
+ if (tg3_asic_rev(tp) == ASIC_REV_5762)
+  tp->grc_local_ctrl |=
+   tr32(GRC_LOCAL_CTRL) & GRC_LCLCTRL_GPIO_UART_SEL;
+
+
+ tg3_pwrsrc_switch_to_vmain(tp);
+
+
+
+
+ if (tp->dev->mtu > ETH_DATA_LEN && !tg3_flag(tp, 5780_CLASS))
+  tg3_flag_set(tp, JUMBO_RING_ENABLE);
+
+
+ if (tg3_asic_rev(tp) == ASIC_REV_5700 ||
+     tg3_chip_rev_id(tp) == CHIPREV_ID_5701_A0 ||
+     tg3_chip_rev_id(tp) == CHIPREV_ID_5701_B0 ||
+     tg3_chip_rev_id(tp) == CHIPREV_ID_5701_B2){
+  tg3_flag_clear(tp, WOL_SPEED_100MB);
+ } else{
+  tg3_flag_set(tp, WOL_SPEED_100MB);
+ }
+
+ if (tg3_asic_rev(tp) == ASIC_REV_5906)
+  tp->phy_flags |= TG3_PHYFLG_IS_FET;
+
+
+ if (tg3_asic_rev(tp) == ASIC_REV_5700 ||
+     (tg3_asic_rev(tp) == ASIC_REV_5705 &&
+      (tg3_chip_rev_id(tp) != CHIPREV_ID_5705_A0) &&
+      (tg3_chip_rev_id(tp) != CHIPREV_ID_5705_A1)) ||
+     (tp->phy_flags & TG3_PHYFLG_IS_FET) ||
+     (tp->phy_flags & TG3_PHYFLG_ANY_SERDES))
+  tp->phy_flags |= TG3_PHYFLG_NO_ETH_WIRE_SPEED;
+
+ if (tg3_chip_rev(tp) == CHIPREV_5703_AX ||
+     tg3_chip_rev(tp) == CHIPREV_5704_AX)
+  tp->phy_flags |= TG3_PHYFLG_ADC_BUG;
+ if (tg3_chip_rev_id(tp) == CHIPREV_ID_5704_A0)
+  tp->phy_flags |= TG3_PHYFLG_5704_A0_BUG;
+
+ if (tg3_flag(tp, 5705_PLUS) &&
+     !(tp->phy_flags & TG3_PHYFLG_IS_FET) &&
+     tg3_asic_rev(tp) != ASIC_REV_5785 &&
+     tg3_asic_rev(tp) != ASIC_REV_57780 &&
+     !tg3_flag(tp, 57765_PLUS)){
+  if (tg3_asic_rev(tp) == ASIC_REV_5755 ||
+      tg3_asic_rev(tp) == ASIC_REV_5787 ||
+      tg3_asic_rev(tp) == ASIC_REV_5784 ||
+      tg3_asic_rev(tp) == ASIC_REV_5761){
+   if (tp->pdev->device != PCI_DEVICE_ID_TIGON3_5756 &&
+       tp->pdev->device != PCI_DEVICE_ID_TIGON3_5722)
+    tp->phy_flags |= TG3_PHYFLG_JITTER_BUG;
+   if (tp->pdev->device == PCI_DEVICE_ID_TIGON3_5755M)
+    tp->phy_flags |= TG3_PHYFLG_ADJUST_TRIM;
+  } else
+   tp->phy_flags |= TG3_PHYFLG_BER_BUG;
+ }
+
+ if (tg3_asic_rev(tp) == ASIC_REV_5784 &&
+     tg3_chip_rev(tp) != CHIPREV_5784_AX){
+  tp->phy_otp = tg3_read_otp_phycfg(tp);
+  if (tp->phy_otp == 0)
+   tp->phy_otp = TG3_OTP_DEFAULT;
+ }
+
+ if (tg3_flag(tp, CPMU_PRESENT))
+  tp->mi_mode = MAC_MI_MODE_500KHZ_CONST;
+ else
+  tp->mi_mode = MAC_MI_MODE_BASE;
+
+ tp->coalesce_mode = 0;
+ if (tg3_chip_rev(tp) != CHIPREV_5700_AX &&
+     tg3_chip_rev(tp) != CHIPREV_5700_BX)
+  tp->coalesce_mode |= HOSTCC_MODE_32BYTE;
+
+
+ if (tg3_asic_rev(tp) == ASIC_REV_5717 ||
+     tg3_chip_rev_id(tp) == CHIPREV_ID_5719_A0 ||
+     tg3_chip_rev_id(tp) == CHIPREV_ID_5720_A0){
+  tp->coalesce_mode |= HOSTCC_MODE_ATTN;
+  tp->grc_mode |= GRC_MODE_IRQ_ON_FLOW_ATTN;
+ }
+
+ if (tg3_asic_rev(tp) == ASIC_REV_5785 ||
+     tg3_asic_rev(tp) == ASIC_REV_57780)
+  tg3_flag_set(tp, USE_PHYLIB);
+
+ err = tg3_mdio_init(tp);
+ if (err)
+  return err;
+
+
+ val = tr32(GRC_MODE);
+ if (tg3_asic_rev(tp) == ASIC_REV_5720 ||
+     tg3_asic_rev(tp) == ASIC_REV_5762)
+  val &= (GRC_MODE_BYTE_SWAP_B2HRX_DATA |
+   GRC_MODE_WORD_SWAP_B2HRX_DATA |
+   GRC_MODE_B2HRX_ENABLE |
+   GRC_MODE_HTX2B_ENABLE |
+   GRC_MODE_HOST_STACKUP);
+ else
+  val &= GRC_MODE_HOST_STACKUP;
+
+ tw32(GRC_MODE, val | tp->grc_mode);
+
+ tg3_switch_clocks(tp);
+
+
+ tw32(TG3PCI_MEM_WIN_BASE_ADDR, 0);
+
+ pci_read_config_dword(tp->pdev, TG3PCI_PCISTATE,
+         &pci_state_reg);
+ if ((pci_state_reg & PCISTATE_CONV_PCI_MODE) == 0 &&
+     !tg3_flag(tp, PCIX_TARGET_HWBUG)){
+  if (tg3_chip_rev_id(tp) == CHIPREV_ID_5701_A0 ||
+      tg3_chip_rev_id(tp) == CHIPREV_ID_5701_B0 ||
+      tg3_chip_rev_id(tp) == CHIPREV_ID_5701_B2 ||
+      tg3_chip_rev_id(tp) == CHIPREV_ID_5701_B5){
+   void __iomem *sram_base;
+
+
+
+
+
+   sram_base = tp->regs + NIC_SRAM_WIN_BASE + NIC_SRAM_STATS_BLK;
+
+   writel(0x00000000, sram_base);
+   writel(0x00000000, sram_base + 4);
+   writel(0xffffffff, sram_base + 4);
+   if (readl(sram_base) != 0x00000000)
+    tg3_flag_set(tp, PCIX_TARGET_HWBUG);
+  }
+ }
+
+ udelay(50);
+ tg3_nvram_init(tp);
+
+ grc_misc_cfg = tr32(GRC_MISC_CFG);
+ grc_misc_cfg &= GRC_MISC_CFG_BOARD_ID_MASK;
+
+ if (tg3_asic_rev(tp) == ASIC_REV_5705 &&
+     (grc_misc_cfg == GRC_MISC_CFG_BOARD_ID_5788 ||
+      grc_misc_cfg == GRC_MISC_CFG_BOARD_ID_5788M))
+  tg3_flag_set(tp, IS_5788);
+
+ if (!tg3_flag(tp, IS_5788) &&
+     tg3_asic_rev(tp) != ASIC_REV_5700)
+  tg3_flag_set(tp, TAGGED_STATUS);
+ if (tg3_flag(tp, TAGGED_STATUS)){
+  tp->coalesce_mode |= (HOSTCC_MODE_CLRTICK_RXBD |
+          HOSTCC_MODE_CLRTICK_TXBD);
+
+  tp->misc_host_ctrl |= MISC_HOST_CTRL_TAGGED_STATUS;
+  pci_write_config_dword(tp->pdev, TG3PCI_MISC_HOST_CTRL,
+           tp->misc_host_ctrl);
+ }
+
+
+ if (tg3_flag(tp, ENABLE_APE))
+  tp->mac_mode = MAC_MODE_APE_TX_EN | MAC_MODE_APE_RX_EN;
+ else
+  tp->mac_mode = 0;
+
+ if (tg3_10_100_only_device(tp, ent))
+  tp->phy_flags |= TG3_PHYFLG_10_100_ONLY;
+
+ err = tg3_phy_probe(tp);
+ if (err){
+  dev_err(&tp->pdev->dev, "phy probe failed, err %d\n", err);
+
+  tg3_mdio_fini(tp);
+ }
+
+ tg3_read_vpd(tp);
+ tg3_read_fw_ver(tp);
+
+ if (tp->phy_flags & TG3_PHYFLG_PHY_SERDES){
+  tp->phy_flags &= ~TG3_PHYFLG_USE_MI_INTERRUPT;
+ } else{
+  if (tg3_asic_rev(tp) == ASIC_REV_5700)
+   tp->phy_flags |= TG3_PHYFLG_USE_MI_INTERRUPT;
+  else
+   tp->phy_flags &= ~TG3_PHYFLG_USE_MI_INTERRUPT;
+ }
+
+
+
+
+
+ if (tg3_asic_rev(tp) == ASIC_REV_5700)
+  tg3_flag_set(tp, USE_LINKCHG_REG);
+ else
+  tg3_flag_clear(tp, USE_LINKCHG_REG);
+
+
+
+
+
+ if (tp->pdev->subsystem_vendor == PCI_VENDOR_ID_DELL &&
+     tg3_asic_rev(tp) == ASIC_REV_5701 &&
+     !(tp->phy_flags & TG3_PHYFLG_PHY_SERDES)){
+  tp->phy_flags |= TG3_PHYFLG_USE_MI_INTERRUPT;
+  tg3_flag_set(tp, USE_LINKCHG_REG);
+ }
+
+
+ if (tp->phy_flags & TG3_PHYFLG_PHY_SERDES)
+  tg3_flag_set(tp, POLL_SERDES);
+ else
+  tg3_flag_clear(tp, POLL_SERDES);
+
+ tp->rx_offset = NET_SKB_PAD + NET_IP_ALIGN;
+ tp->rx_copy_thresh = TG3_RX_COPY_THRESHOLD;
+ if (tg3_asic_rev(tp) == ASIC_REV_5701 &&
+     tg3_flag(tp, PCIX_MODE)){
+  tp->rx_offset = NET_SKB_PAD;
+#ifndef CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS
+  tp->rx_copy_thresh = ~(u16)0;
+#endif
+ }
+
+ tp->rx_std_ring_mask = TG3_RX_STD_RING_SIZE(tp) - 1;
+ tp->rx_jmb_ring_mask = TG3_RX_JMB_RING_SIZE(tp) - 1;
+ tp->rx_ret_ring_mask = tg3_rx_ret_ring_size(tp) - 1;
+
+ tp->rx_std_max_post = tp->rx_std_ring_mask + 1;
+
+
+
+
+ if (tg3_asic_rev(tp) == ASIC_REV_5750 ||
+     tg3_asic_rev(tp) == ASIC_REV_5752 ||
+     tg3_asic_rev(tp) == ASIC_REV_5755)
+  tp->rx_std_max_post = 8;
+
+ if (tg3_flag(tp, ASPM_WORKAROUND))
+  tp->pwrmgmt_thresh = tr32(PCIE_PWR_MGMT_THRESH) &
+         PCIE_PWR_MGMT_L1_THRESH_MSK;
+
+ return err;
+}

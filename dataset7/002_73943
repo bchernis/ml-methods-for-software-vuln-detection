@@ -1,0 +1,134 @@
+PHP_FUNCTION(imagepstext){
+ zval *img, *fnt;
+ int i, j;
+ long _fg, _bg, x, y, size, space = 0, aa_steps = 4, width = 0;
+ int *f_ind;
+ int h_lines, v_lines, c_ind;
+ int rd, gr, bl, fg_rd, fg_gr, fg_bl, bg_rd, bg_gr, bg_bl;
+ int fg_al, bg_al, al;
+ int aa[16];
+ int amount_kern, add_width;
+ double angle = 0.0, extend;
+ unsigned long aa_greys[] ={0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+ gdImagePtr bg_img;
+ GLYPH *str_img;
+ T1_OUTLINE *char_path, *str_path;
+ T1_TMATRIX *transform = NULL;
+ char *str;
+ int str_len;
+
+ if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "rsrlllll|lldl", &img, &str, &str_len, &fnt, &size, &_fg, &_bg, &x, &y, &space, &width, &angle, &aa_steps) == FAILURE){
+  return;
+ }
+
+ if (aa_steps != 4 && aa_steps != 16){
+  php_error_docref(NULL TSRMLS_CC, E_WARNING, "Antialias steps must be 4 or 16");
+  RETURN_FALSE;
+ }
+
+ ZEND_FETCH_RESOURCE(bg_img, gdImagePtr, &img, -1, "Image", le_gd);
+ ZEND_FETCH_RESOURCE(f_ind, int *, &fnt, -1, "Type 1 font", le_ps_font);
+
+
+ if (_fg < 0 || (!gdImageTrueColor(bg_img) && _fg > gdImageColorsTotal(bg_img))){
+  php_error_docref(NULL TSRMLS_CC, E_WARNING, "Foreground color index %ld out of range", _fg);
+  RETURN_FALSE;
+ }
+
+ if (_bg < 0 || (!gdImageTrueColor(bg_img) && _fg > gdImageColorsTotal(bg_img))){
+  php_error_docref(NULL TSRMLS_CC, E_WARNING, "Background color index %ld out of range", _bg);
+  RETURN_FALSE;
+ }
+
+ fg_rd = gdImageRed (bg_img, _fg);
+ fg_gr = gdImageGreen(bg_img, _fg);
+ fg_bl = gdImageBlue (bg_img, _fg);
+ fg_al = gdImageAlpha(bg_img, _fg);
+
+ bg_rd = gdImageRed (bg_img, _bg);
+ bg_gr = gdImageGreen(bg_img, _bg);
+ bg_bl = gdImageBlue (bg_img, _bg);
+ bg_al = gdImageAlpha(bg_img, _bg);
+
+ for (i = 0; i < aa_steps; i++){
+  rd = bg_rd + (double) (fg_rd - bg_rd) / aa_steps * (i + 1);
+  gr = bg_gr + (double) (fg_gr - bg_gr) / aa_steps * (i + 1);
+  bl = bg_bl + (double) (fg_bl - bg_bl) / aa_steps * (i + 1);
+  al = bg_al + (double) (fg_al - bg_al) / aa_steps * (i + 1);
+  aa[i] = gdImageColorResolveAlpha(bg_img, rd, gr, bl, al);
+ }
+
+ T1_AASetBitsPerPixel(8);
+
+ switch (aa_steps){
+  case 4:
+   T1_AASetGrayValues(0, 1, 2, 3, 4);
+   T1_AASetLevel(T1_AA_LOW);
+   break;
+  case 16:
+   T1_AAHSetGrayValues(aa_greys);
+   T1_AASetLevel(T1_AA_HIGH);
+   break;
+  default:
+   php_error_docref(NULL TSRMLS_CC, E_WARNING, "Invalid value %ld as number of steps for antialiasing", aa_steps);
+   RETURN_FALSE;
+ }
+
+ if (angle){
+  transform = T1_RotateMatrix(NULL, angle);
+ }
+
+ if (width){
+  extend = T1_GetExtend(*f_ind);
+  str_path = T1_GetCharOutline(*f_ind, str[0], size, transform);
+
+  if (!str_path){
+   if (T1_errno){
+    php_error_docref(NULL TSRMLS_CC, E_WARNING, "T1Lib Error: %s", T1_StrError(T1_errno));
+   }
+   RETURN_FALSE;
+  }
+
+  for (i = 1; i < str_len; i++){
+   amount_kern = (int) T1_GetKerning(*f_ind, str[i - 1], str[i]);
+   amount_kern += str[i - 1] == ' ' ? space : 0;
+   add_width = (int) (amount_kern + width) / extend;
+
+   char_path = T1_GetMoveOutline(*f_ind, add_width, 0, 0, size, transform);
+   str_path = T1_ConcatOutlines(str_path, char_path);
+
+   char_path = T1_GetCharOutline(*f_ind, str[i], size, transform);
+   str_path = T1_ConcatOutlines(str_path, char_path);
+  }
+  str_img = T1_AAFillOutline(str_path, 0);
+ } else{
+  str_img = T1_AASetString(*f_ind, str, str_len, space, T1_KERNING, size, transform);
+ }
+ if (T1_errno){
+  php_error_docref(NULL TSRMLS_CC, E_WARNING, "T1Lib Error: %s", T1_StrError(T1_errno));
+  RETURN_FALSE;
+ }
+
+ h_lines = str_img->metrics.ascent - str_img->metrics.descent;
+ v_lines = str_img->metrics.rightSideBearing - str_img->metrics.leftSideBearing;
+
+ for (i = 0; i < v_lines; i++){
+  for (j = 0; j < h_lines; j++){
+   switch (str_img->bits[j * v_lines + i]){
+    case 0:
+     break;
+    default:
+     c_ind = aa[str_img->bits[j * v_lines + i] - 1];
+     gdImageSetPixel(bg_img, x + str_img->metrics.leftSideBearing + i, y - str_img->metrics.ascent + j, c_ind);
+     break;
+   }
+  }
+ }
+
+ array_init(return_value);
+
+ add_next_index_long(return_value, str_img->metrics.leftSideBearing);
+ add_next_index_long(return_value, str_img->metrics.descent);
+ add_next_index_long(return_value, str_img->metrics.rightSideBearing);
+ add_next_index_long(return_value, str_img->metrics.ascent);
+}

@@ -1,0 +1,4 @@
+proctab_hasher (void const *entry, size_t tabsize){
+  struct tempnode const *node = entry;
+  return node->pid % tabsize;
+}

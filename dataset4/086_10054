@@ -1,0 +1,5 @@
+announce_mkdir (char const *dir, void *options){
+  struct mkdir_options const *o = options;
+  if (o->created_directory_format)
+    prog_fprintf (stdout, o->created_directory_format, quoteaf (dir));
+}

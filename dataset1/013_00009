@@ -1,0 +1,24 @@
+int32_t DecoderConfigParam (PWelsDecoderContext pCtx, const SDecodingParam* kpParam){
+  if (NULL == pCtx || NULL == kpParam)
+    return 1;
+
+  pCtx->pParam = (SDecodingParam*)WelsMalloc (sizeof (SDecodingParam), "SDecodingParam");
+
+  if (NULL == pCtx->pParam)
+    return 1;
+
+  memcpy (pCtx->pParam, kpParam, sizeof (SDecodingParam));
+  pCtx->iOutputColorFormat = pCtx->pParam->iOutputColorFormat;
+  pCtx->bErrorResilienceFlag = pCtx->pParam->uiEcActiveFlag ? true : false;
+
+  if (VIDEO_BITSTREAM_SVC == pCtx->pParam->sVideoProperty.eVideoBsType ||
+      VIDEO_BITSTREAM_AVC == pCtx->pParam->sVideoProperty.eVideoBsType){
+    pCtx->eVideoType = pCtx->pParam->sVideoProperty.eVideoBsType;
+  } else{
+    pCtx->eVideoType = VIDEO_BITSTREAM_DEFAULT;
+  }
+
+  WelsLog (&(pCtx->sLogCtx), WELS_LOG_INFO, "eVideoType: %d\n", pCtx->eVideoType);
+
+  return 0;
+}

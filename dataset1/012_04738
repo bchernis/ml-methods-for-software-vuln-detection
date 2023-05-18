@@ -1,0 +1,52 @@
+PHP_FUNCTION(curl_exec){
+ CURLcode error;
+ zval *zid;
+ php_curl *ch;
+
+ if (zend_parse_parameters(ZEND_NUM_ARGS(), "r", &zid) == FAILURE){
+  return;
+ }
+
+ if ((ch = (php_curl*)zend_fetch_resource(Z_RES_P(zid), le_curl_name, le_curl)) == NULL){
+  RETURN_FALSE;
+ }
+
+ _php_curl_verify_handlers(ch, 1);
+
+ _php_curl_cleanup_handle(ch);
+
+ error = curl_easy_perform(ch->cp);
+ SAVE_CURL_ERROR(ch, error);
+
+ if (error != CURLE_OK && error != CURLE_PARTIAL_FILE){
+  smart_str_free(&ch->handlers->write->buf);
+  RETURN_FALSE;
+ }
+
+ if (!Z_ISUNDEF(ch->handlers->std_err)){
+  php_stream *stream;
+  stream = (php_stream*)zend_fetch_resource2_ex(&ch->handlers->std_err, NULL, php_file_le_stream(), php_file_le_pstream());
+  if (stream){
+   php_stream_flush(stream);
+  }
+ }
+
+ if (ch->handlers->write->method == PHP_CURL_RETURN && ch->handlers->write->buf.s){
+  smart_str_0(&ch->handlers->write->buf);
+  RETURN_STR_COPY(ch->handlers->write->buf.s);
+ }
+
+
+ if (ch->handlers->write->method == PHP_CURL_FILE && ch->handlers->write->fp){
+  fflush(ch->handlers->write->fp);
+ }
+ if (ch->handlers->write_header->method == PHP_CURL_FILE && ch->handlers->write_header->fp){
+  fflush(ch->handlers->write_header->fp);
+ }
+
+ if (ch->handlers->write->method == PHP_CURL_RETURN){
+  RETURN_EMPTY_STRING();
+ } else{
+  RETURN_TRUE;
+ }
+}

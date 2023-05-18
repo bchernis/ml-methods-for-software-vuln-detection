@@ -1,0 +1,54 @@
+static int jpc_dec_decode(jpc_dec_t *dec){
+ jpc_ms_t *ms;
+ jpc_dec_mstabent_t *mstabent;
+ int ret;
+ jpc_cstate_t *cstate;
+
+ if (!(cstate = jpc_cstate_create())){
+  return -1;
+ }
+ dec->cstate = cstate;
+
+
+ dec->state = JPC_MHSOC;
+
+ for (;;){
+
+
+  if (!(ms = jpc_getms(dec->in, cstate))){
+   jas_eprintf("cannot get marker segment\n");
+   return -1;
+  }
+
+  mstabent = jpc_dec_mstab_lookup(ms->id);
+  assert(mstabent);
+
+
+
+  if (!(dec->state & mstabent->validstates)){
+   jas_eprintf("unexpected marker segment type\n");
+   jpc_ms_destroy(ms);
+   return -1;
+  }
+
+
+  if (mstabent->action){
+   ret = (*mstabent->action)(dec, ms);
+  } else{
+
+   ret = 0;
+  }
+
+
+  jpc_ms_destroy(ms);
+
+  if (ret < 0){
+   return -1;
+  } else if (ret > 0){
+   break;
+  }
+
+ }
+
+ return 0;
+}

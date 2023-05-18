@@ -1,0 +1,43 @@
+char *phar_create_default_stub(const char *index_php, const char *web_index, size_t *len, char **error TSRMLS_DC){
+ char *stub = NULL;
+ int index_len, web_len;
+ size_t dummy;
+
+ if (!len){
+  len = &dummy;
+ }
+
+ if (error){
+  *error = NULL;
+ }
+
+ if (!index_php){
+  index_php = "index.php";
+ }
+
+ if (!web_index){
+  web_index = "index.php";
+ }
+
+ index_len = strlen(index_php);
+ web_len = strlen(web_index);
+
+ if (index_len > 400){
+
+  if (error){
+   spprintf(error, 0, "Illegal filename passed in for stub creation, was %d characters long, and only 400 or less is allowed", index_len);
+   return NULL;
+  }
+ }
+
+ if (web_len > 400){
+
+  if (error){
+   spprintf(error, 0, "Illegal web filename passed in for stub creation, was %d characters long, and only 400 or less is allowed", web_len);
+   return NULL;
+  }
+ }
+
+ phar_get_stub(index_php, web_index, len, &stub, index_len+1, web_len+1 TSRMLS_CC);
+ return stub;
+}

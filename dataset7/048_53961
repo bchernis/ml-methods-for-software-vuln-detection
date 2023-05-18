@@ -1,0 +1,22 @@
+static void php_image_filter_pixelate(INTERNAL_FUNCTION_PARAMETERS){
+ zval *IM;
+ gdImagePtr im;
+ long tmp, blocksize;
+ zend_bool mode = 0;
+
+ if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "rll|b", &IM, &tmp, &blocksize, &mode) == FAILURE){
+  RETURN_FALSE;
+ }
+
+ ZEND_FETCH_RESOURCE(im, gdImagePtr, &IM, -1, "Image", le_gd);
+
+ if (im == NULL){
+  RETURN_FALSE;
+ }
+
+ if (gdImagePixelate(im, (int) blocksize, (const unsigned int) mode)){
+  RETURN_TRUE;
+ }
+
+ RETURN_FALSE;
+}

@@ -1,0 +1,13 @@
+ZEND_API void* ZEND_FASTCALL _emalloc(size_t size ZEND_FILE_LINE_DC ZEND_FILE_LINE_ORIG_DC){
+
+#if ZEND_MM_CUSTOM
+ if (UNEXPECTED(AG(mm_heap)->use_custom_heap)){
+  if (ZEND_DEBUG && AG(mm_heap)->use_custom_heap == ZEND_MM_CUSTOM_HEAP_DEBUG){
+   return AG(mm_heap)->custom_heap.debug._malloc(size ZEND_FILE_LINE_RELAY_CC ZEND_FILE_LINE_ORIG_RELAY_CC);
+  } else{
+   return AG(mm_heap)->custom_heap.std._malloc(size);
+  }
+ }
+#endif
+ return zend_mm_alloc_heap(AG(mm_heap), size ZEND_FILE_LINE_RELAY_CC ZEND_FILE_LINE_ORIG_RELAY_CC);
+}

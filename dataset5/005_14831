@@ -1,0 +1,7 @@
+ZEND_API zend_mm_heap *zend_mm_set_heap(zend_mm_heap *new_heap){
+ zend_mm_heap *old_heap;
+
+ old_heap = AG(mm_heap);
+ AG(mm_heap) = (zend_mm_heap*)new_heap;
+ return (zend_mm_heap*)old_heap;
+}

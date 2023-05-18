@@ -1,0 +1,15 @@
+different (char *old, char *new, size_t oldlen, size_t newlen){
+  if (check_chars < oldlen)
+    oldlen = check_chars;
+  if (check_chars < newlen)
+    newlen = check_chars;
+
+  if (ignore_case){
+
+      return oldlen != newlen || memcasecmp (old, new, oldlen);
+    }
+  else if (hard_LC_COLLATE)
+    return xmemcoll (old, oldlen, new, newlen) != 0;
+  else
+    return oldlen != newlen || memcmp (old, new, oldlen);
+}

@@ -1,0 +1,41 @@
+string2_extend (const struct Spec_list *s1, struct Spec_list *s2){
+  struct List_element *p;
+  unsigned char char_to_repeat;
+
+  assert (translating);
+  assert (s1->length > s2->length);
+  assert (s2->length > 0);
+
+  p = s2->tail;
+  switch (p->type){
+    case RE_NORMAL_CHAR:
+      char_to_repeat = p->u.normal_char;
+      break;
+    case RE_RANGE:
+      char_to_repeat = p->u.range.last_char;
+      break;
+    case RE_CHAR_CLASS:
+
+
+
+
+      die (EXIT_FAILURE, 0,
+           _("when translating with string1 longer than string2,\nthe\
+ latter string must not end with a character class"));
+
+    case RE_REPEATED_CHAR:
+      char_to_repeat = p->u.repeated_char.the_repeated_char;
+      break;
+
+    case RE_EQUIV_CLASS:
+
+
+      abort ();
+
+    default:
+      abort ();
+    }
+
+  append_repeated_char (s2, char_to_repeat, s1->length - s2->length);
+  s2->length = s1->length;
+}

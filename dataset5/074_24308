@@ -1,0 +1,5 @@
+String StringUtil::SHA1(const String& input, bool raw ){
+  int len;
+  char *ret = string_sha1(input.data(), input.size(), raw, len);
+  return String(ret, len, AttachString);
+}

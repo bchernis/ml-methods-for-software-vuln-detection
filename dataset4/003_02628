@@ -1,0 +1,26 @@
+static struct pci_dev *tg3_find_peer(struct tg3 *tp){
+ struct pci_dev *peer;
+ unsigned int func, devnr = tp->pdev->devfn & ~7;
+
+ for (func = 0; func < 8; func++){
+  peer = pci_get_slot(tp->pdev->bus, devnr | func);
+  if (peer && peer != tp->pdev)
+   break;
+  pci_dev_put(peer);
+ }
+
+
+
+ if (!peer){
+  peer = tp->pdev;
+  return peer;
+ }
+
+
+
+
+
+ pci_dev_put(peer);
+
+ return peer;
+}

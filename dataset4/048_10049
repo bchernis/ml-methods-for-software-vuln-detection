@@ -1,0 +1,6 @@
+print_table_row (int num_width, int signum,
+                 int name_width, char const *signame){
+  char const *description = strsignal (signum);
+  printf ("%*d %-*s %s\n", num_width, signum, name_width, signame,
+          description ? description : "?");
+}

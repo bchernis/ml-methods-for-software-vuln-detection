@@ -1,0 +1,3 @@
+static void tg3_save_pci_state(struct tg3 *tp){
+ pci_read_config_word(tp->pdev, PCI_COMMAND, &tp->pci_cmd);
+}

@@ -1,0 +1,18 @@
+bool ImplReadPolyPoly(SvStream& rIStm, tools::PolyPolygon& rPolyPoly){
+    bool bSuccess = true;
+
+    tools::Polygon aPoly;
+    sal_Int32 nPolyCount32(0);
+    rIStm.ReadInt32(nPolyCount32);
+    sal_uInt16 nPolyCount = (sal_uInt16)nPolyCount32;
+
+    for (sal_uInt16 i = 0; i < nPolyCount && rIStm.good(); ++i){
+        if (!ImplReadPoly(rIStm, aPoly)){
+            bSuccess = false;
+            break;
+        }
+        rPolyPoly.Insert(aPoly);
+    }
+
+    return bSuccess && rIStm.good();
+}

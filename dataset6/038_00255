@@ -1,0 +1,14 @@
+append_equiv_class (struct Spec_list *list,
+                    char const *equiv_class_str, size_t len){
+  if (len != 1)
+    return false;
+
+  struct List_element *new = xmalloc (sizeof *new);
+  new->next = NULL;
+  new->type = RE_EQUIV_CLASS;
+  new->u.equiv_code = *equiv_class_str;
+  assert (list->tail);
+  list->tail->next = new;
+  list->tail = new;
+  return true;
+}

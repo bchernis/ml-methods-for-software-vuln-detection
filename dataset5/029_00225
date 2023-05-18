@@ -1,0 +1,8 @@
+tailable_stdin (const struct File_spec *f, size_t n_files){
+  size_t i;
+
+  for (i = 0; i < n_files; i++)
+    if (!f[i].ignore && STREQ (f[i].name, "-"))
+      return true;
+  return false;
+}

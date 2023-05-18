@@ -1,0 +1,28 @@
+usage (int status){
+  if (status != EXIT_SUCCESS)
+    emit_try_help ();
+  else{
+      printf (_("Usage: %s [OPTION]... DIRECTORY...\n"), program_name);
+      fputs (_("\
+Create the DIRECTORY(ies), if they do not already exist.\n\
+"), stdout);
+
+      emit_mandatory_arg_note ();
+
+      fputs (_("\
+  -m, --mode=MODE set file mode (as in chmod), not a=rwx - umask\n\
+  -p, --parents no error if existing, make parent directories as needed\n\
+  -v, --verbose print a message for each created directory\n\
+"), stdout);
+      fputs (_("\
+  -Z set SELinux security context of each created directory\n\
+                         to the default type\n\
+      --context[=CTX] like -Z, or if CTX is specified then set the SELinux\n\
+                         or SMACK security context to CTX\n\
+"), stdout);
+      fputs (HELP_OPTION_DESCRIPTION, stdout);
+      fputs (VERSION_OPTION_DESCRIPTION, stdout);
+      emit_ancillary_info (PROGRAM_NAME);
+    }
+  exit (status);
+}

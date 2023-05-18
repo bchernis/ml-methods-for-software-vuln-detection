@@ -1,0 +1,3 @@
+create_temp (FILE **pfp){
+  return maybe_create_temp (pfp, false);
+}

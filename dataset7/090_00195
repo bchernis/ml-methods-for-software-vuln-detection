@@ -1,0 +1,9 @@
+insertkey (struct keyfield *key_arg){
+  struct keyfield **p;
+  struct keyfield *key = xmemdup (key_arg, sizeof *key);
+
+  for (p = &keylist; *p; p = &(*p)->next)
+    continue;
+  *p = key;
+  key->next = NULL;
+}

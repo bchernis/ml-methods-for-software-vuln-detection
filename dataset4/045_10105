@@ -1,0 +1,25 @@
+apply_suffix (double *x, char suffix_char){
+  int multiplier;
+
+  switch (suffix_char){
+    case 0:
+    case 's':
+      multiplier = 1;
+      break;
+    case 'm':
+      multiplier = 60;
+      break;
+    case 'h':
+      multiplier = 60 * 60;
+      break;
+    case 'd':
+      multiplier = 60 * 60 * 24;
+      break;
+    default:
+      return false;
+    }
+
+  *x *= multiplier;
+
+  return true;
+}

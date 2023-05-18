@@ -1,0 +1,30 @@
+bool DocStats::read(StarZone &zone){
+  STOFFInputStreamPtr input=zone.input();
+  libstoff::DebugFile &ascFile=zone.ascii();
+  libstoff::DebugStream f;
+  long pos=input->tell();
+  char type;
+  if (input->peek()!='d' || !zone.openSWRecord(type)){
+    input->seek(pos, librevenge::RVNG_SEEK_SET);
+    STOFF_DEBUG_MSG(("StarWriterStruct::DocStats::read: can not read a docStats\n"));
+    return false;
+  }
+
+  f << "Entries(StarDocStats)[" << zone.getRecordLevel() << "]:";
+  for (int i=0; i<3; ++i) m_numbers[i]=long(input->readULong(2));
+  if (zone.isCompatibleWith(0x201)){
+    m_numbers[3]=long(input->readULong(4));
+    m_numbers[4]=long(input->readULong(4));
+  }
+  else{
+    m_numbers[3]=long(input->readULong(2));
+    m_numbers[4]=long(input->readULong(2));
+  }
+  for (int i=5; i<7; ++i) m_numbers[i]=long(input->readULong(4));
+  *input >> m_isModified;
+  f << *this;
+  ascFile.addPos(pos);
+  ascFile.addNote(f.str().c_str());
+  zone.closeSWRecord(type, "StarDocStats");
+  return true;
+}

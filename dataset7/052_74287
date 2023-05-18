@@ -1,0 +1,5 @@
+String StringUtil::HtmlEncode(const String& input, QuoteStyle quoteStyle,
+                              const char *charset, bool dEncode, bool htmlEnt){
+  return HtmlEncode(input, static_cast<int64_t>(quoteStyle),
+                    charset, dEncode, htmlEnt);
+}

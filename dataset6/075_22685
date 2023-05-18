@@ -1,0 +1,22 @@
+static int wdm_pre_reset(struct usb_interface *intf){
+ struct wdm_device *desc = wdm_find_device(intf);
+
+
+
+
+
+
+
+ spin_lock_irq(&desc->iuspin);
+ set_bit(WDM_RESETTING, &desc->flags);
+ set_bit(WDM_READ, &desc->flags);
+ clear_bit(WDM_IN_USE, &desc->flags);
+ desc->rerr = -EINTR;
+ spin_unlock_irq(&desc->iuspin);
+ wake_up_all(&desc->wait);
+ mutex_lock(&desc->rlock);
+ mutex_lock(&desc->wlock);
+ kill_urbs(desc);
+ cancel_work_sync(&desc->rxwork);
+ return 0;
+}

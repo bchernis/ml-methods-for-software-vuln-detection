@@ -1,0 +1,302 @@
+undo_time(
+    long step,
+    int sec,
+    int file,
+    int absolute){
+    long target;
+    long closest;
+    long closest_start;
+    long closest_seq = 0;
+    long val;
+    u_header_T *uhp;
+    u_header_T *last;
+    int mark;
+    int nomark;
+    int round;
+    int dosec = sec;
+    int dofile = file;
+    int above = FALSE;
+    int did_undo = TRUE;
+
+
+    if (curbuf->b_u_synced == FALSE)
+ u_sync(TRUE);
+
+    u_newcount = 0;
+    u_oldcount = 0;
+    if (curbuf->b_ml.ml_flags & ML_EMPTY)
+ u_oldcount = -1;
+
+
+
+    if (absolute){
+ if (step == 0){
+
+     target = 1;
+     above = TRUE;
+ }
+ else
+     target = step;
+ closest = -1;
+    }
+    else{
+ if (dosec)
+     target = (long)(curbuf->b_u_time_cur) + step;
+ else if (dofile){
+     if (step < 0){
+
+
+
+  uhp = curbuf->b_u_curhead;
+  if (uhp != NULL)
+      uhp = uhp->uh_next.ptr;
+  else
+      uhp = curbuf->b_u_newhead;
+  if (uhp != NULL && uhp->uh_save_nr != 0)
+
+
+      target = curbuf->b_u_save_nr_cur + step;
+  else
+
+      target = curbuf->b_u_save_nr_cur + step + 1;
+  if (target <= 0)
+
+
+      dofile = FALSE;
+     }
+     else{
+
+  target = curbuf->b_u_save_nr_cur + step;
+  if (target > curbuf->b_u_save_nr_last){
+
+
+      target = curbuf->b_u_seq_last + 1;
+      dofile = FALSE;
+  }
+     }
+ }
+ else
+     target = curbuf->b_u_seq_cur + step;
+ if (step < 0){
+     if (target < 0)
+  target = 0;
+     closest = -1;
+ }
+ else{
+     if (dosec)
+  closest = (long)(vim_time() + 1);
+     else if (dofile)
+  closest = curbuf->b_u_save_nr_last + 2;
+     else
+  closest = curbuf->b_u_seq_last + 2;
+     if (target >= closest)
+  target = closest - 1;
+ }
+    }
+    closest_start = closest;
+    closest_seq = curbuf->b_u_seq_cur;
+# 2371 "originals/76a.c"
+    for (round = 1; round <= 2; ++round){
+
+
+
+
+ mark = ++lastmark;
+ nomark = ++lastmark;
+
+ if (curbuf->b_u_curhead == NULL)
+     uhp = curbuf->b_u_newhead;
+ else
+     uhp = curbuf->b_u_curhead;
+
+ while (uhp != NULL){
+     uhp->uh_walk = mark;
+     if (dosec)
+  val = (long)(uhp->uh_time);
+     else if (dofile)
+  val = uhp->uh_save_nr;
+     else
+  val = uhp->uh_seq;
+
+     if (round == 1 && !(dofile && val == 0)){
+
+
+
+
+  if ((step < 0 ? uhp->uh_seq <= curbuf->b_u_seq_cur
+         : uhp->uh_seq > curbuf->b_u_seq_cur)
+   && ((dosec && val == closest)
+       ? (step < 0
+    ? uhp->uh_seq < closest_seq
+    : uhp->uh_seq > closest_seq)
+       : closest == closest_start
+    || (val > target
+        ? (closest > target
+     ? val - target <= closest - target
+     : val - target <= target - closest)
+        : (closest > target
+     ? target - val <= closest - target
+     : target - val <= target - closest)))){
+      closest = val;
+      closest_seq = uhp->uh_seq;
+  }
+     }
+
+
+
+     if (target == val && !dosec){
+  target = uhp->uh_seq;
+  break;
+     }
+
+
+     if (uhp->uh_prev.ptr != NULL && uhp->uh_prev.ptr->uh_walk != nomark
+      && uhp->uh_prev.ptr->uh_walk != mark)
+  uhp = uhp->uh_prev.ptr;
+
+
+     else if (uhp->uh_alt_next.ptr != NULL
+      && uhp->uh_alt_next.ptr->uh_walk != nomark
+      && uhp->uh_alt_next.ptr->uh_walk != mark)
+  uhp = uhp->uh_alt_next.ptr;
+
+
+
+     else if (uhp->uh_next.ptr != NULL && uhp->uh_alt_prev.ptr == NULL
+      && uhp->uh_next.ptr->uh_walk != nomark
+      && uhp->uh_next.ptr->uh_walk != mark){
+
+  if (uhp == curbuf->b_u_curhead)
+      uhp->uh_walk = nomark;
+  uhp = uhp->uh_next.ptr;
+     }
+
+     else{
+
+  uhp->uh_walk = nomark;
+  if (uhp->uh_alt_prev.ptr != NULL)
+      uhp = uhp->uh_alt_prev.ptr;
+  else
+      uhp = uhp->uh_next.ptr;
+     }
+ }
+
+ if (uhp != NULL)
+     break;
+
+ if (absolute){
+     EMSGN(_("E830: Undo number %ld not found"), step);
+     return;
+ }
+
+ if (closest == closest_start){
+     if (step < 0)
+  MSG(_("Already at oldest change"));
+     else
+  MSG(_("Already at newest change"));
+     return;
+ }
+
+ target = closest_seq;
+ dosec = FALSE;
+ dofile = FALSE;
+ if (step < 0)
+     above = TRUE;
+    }
+
+
+    if (uhp != NULL){
+
+
+
+ while (!got_int){
+
+     change_warning(0);
+
+     uhp = curbuf->b_u_curhead;
+     if (uhp == NULL)
+  uhp = curbuf->b_u_newhead;
+     else
+  uhp = uhp->uh_next.ptr;
+     if (uhp == NULL || uhp->uh_walk != mark
+      || (uhp->uh_seq == target && !above))
+  break;
+     curbuf->b_u_curhead = uhp;
+     u_undoredo(TRUE);
+     uhp->uh_walk = nomark;
+ }
+
+
+
+
+ while (!got_int){
+
+     change_warning(0);
+
+     uhp = curbuf->b_u_curhead;
+     if (uhp == NULL)
+  break;
+
+
+     while (uhp->uh_alt_prev.ptr != NULL
+         && uhp->uh_alt_prev.ptr->uh_walk == mark)
+  uhp = uhp->uh_alt_prev.ptr;
+
+
+     last = uhp;
+     while (last->uh_alt_next.ptr != NULL
+        && last->uh_alt_next.ptr->uh_walk == mark)
+  last = last->uh_alt_next.ptr;
+     if (last != uhp){
+
+
+  while (uhp->uh_alt_prev.ptr != NULL)
+      uhp = uhp->uh_alt_prev.ptr;
+  if (last->uh_alt_next.ptr != NULL)
+      last->uh_alt_next.ptr->uh_alt_prev.ptr =
+       last->uh_alt_prev.ptr;
+  last->uh_alt_prev.ptr->uh_alt_next.ptr = last->uh_alt_next.ptr;
+  last->uh_alt_prev.ptr = NULL;
+  last->uh_alt_next.ptr = uhp;
+  uhp->uh_alt_prev.ptr = last;
+
+  if (curbuf->b_u_oldhead == uhp)
+      curbuf->b_u_oldhead = last;
+  uhp = last;
+  if (uhp->uh_next.ptr != NULL)
+      uhp->uh_next.ptr->uh_prev.ptr = uhp;
+     }
+     curbuf->b_u_curhead = uhp;
+
+     if (uhp->uh_walk != mark)
+  break;
+
+
+
+     if (uhp->uh_seq == target && above){
+  curbuf->b_u_seq_cur = target - 1;
+  break;
+     }
+
+     u_undoredo(FALSE);
+
+
+
+     if (uhp->uh_prev.ptr == NULL)
+  curbuf->b_u_newhead = uhp;
+     curbuf->b_u_curhead = uhp->uh_prev.ptr;
+     did_undo = FALSE;
+
+     if (uhp->uh_seq == target)
+  break;
+
+     uhp = uhp->uh_prev.ptr;
+     if (uhp == NULL || uhp->uh_walk != mark){
+
+  internal_error("undo_time()");
+  break;
+     }
+ }
+    }
+    u_undo_end(did_undo, absolute);
+}

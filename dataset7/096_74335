@@ -1,0 +1,8 @@
+spell_info_item(char_u *s){
+    return STRCMP(s, "NAME") == 0
+ || STRCMP(s, "HOME") == 0
+ || STRCMP(s, "VERSION") == 0
+ || STRCMP(s, "AUTHOR") == 0
+ || STRCMP(s, "EMAIL") == 0
+ || STRCMP(s, "COPYRIGHT") == 0;
+}

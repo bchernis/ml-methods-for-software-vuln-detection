@@ -1,0 +1,49 @@
+static netdev_tx_t start_xmit(struct sk_buff *skb, struct net_device *dev){
+ struct virtnet_info *vi = netdev_priv(dev);
+ int qnum = skb_get_queue_mapping(skb);
+ struct send_queue *sq = &vi->sq[qnum];
+ int err;
+ struct netdev_queue *txq = netdev_get_tx_queue(dev, qnum);
+ bool kick = !skb->xmit_more;
+
+
+ free_old_xmit_skbs(sq);
+
+
+ skb_tx_timestamp(skb);
+
+
+ err = xmit_skb(sq, skb);
+
+
+ if (unlikely(err)){
+  dev->stats.tx_fifo_errors++;
+  if (net_ratelimit())
+   dev_warn(&dev->dev,
+     "Unexpected TXQ (%d) queue failure: %d\n", qnum, err);
+  dev->stats.tx_dropped++;
+  dev_kfree_skb_any(skb);
+  return NETDEV_TX_OK;
+ }
+
+
+ skb_orphan(skb);
+ nf_reset(skb);
+# 952 "originals/17a.c"
+ if (sq->vq->num_free < 2+MAX_SKB_FRAGS){
+  netif_stop_subqueue(dev, qnum);
+  if (unlikely(!virtqueue_enable_cb_delayed(sq->vq))){
+
+   free_old_xmit_skbs(sq);
+   if (sq->vq->num_free >= 2+MAX_SKB_FRAGS){
+    netif_start_subqueue(dev, qnum);
+    virtqueue_disable_cb(sq->vq);
+   }
+  }
+ }
+
+ if (kick || netif_xmit_stopped(txq))
+  virtqueue_kick(sq->vq);
+
+ return NETDEV_TX_OK;
+}

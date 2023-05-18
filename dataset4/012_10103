@@ -1,0 +1,86 @@
+bool DatabaseName::read(StarZone &zone){
+  STOFFInputStreamPtr input=zone.input();
+  libstoff::DebugFile &ascFile=zone.ascii();
+  libstoff::DebugStream f;
+  long pos=input->tell();
+  char type;
+  if (input->peek()!='D' || !zone.openSWRecord(type)){
+    input->seek(pos, librevenge::RVNG_SEEK_SET);
+    STOFF_DEBUG_MSG(("StarWriterStruct::DatabaseName::read: can not read a databaseName\n"));
+    return false;
+  }
+
+  f << "Entries(StarDatabaseName)[" << zone.getRecordLevel() << "]:";
+  std::vector<uint32_t> text;
+  if (!zone.readString(text)){
+    STOFF_DEBUG_MSG(("StarWriterStruct::DatabaseName::read: can not read a string\n"));
+    f << "###string";
+    ascFile.addPos(pos);
+    ascFile.addNote(f.str().c_str());
+    zone.closeSWRecord('D', "StarDatabaseName");
+    return true;
+  }
+  librevenge::RVNGString delim, dbName, tableName;
+  libstoff::appendUnicode(0xff, delim);
+  libstoff::splitString(libstoff::getString(text),delim, dbName, tableName);
+  if (tableName.empty()){
+    if (zone.isCompatibleWith(0x11,0x22))
+      m_names[0]=dbName;
+    else
+      m_names[1]=dbName;
+  }
+  else{
+    m_names[0]=dbName;
+    m_names[1]=tableName;
+  }
+  if (zone.isCompatibleWith(0xf,0x101)){
+    if (!zone.readString(text)){
+      STOFF_DEBUG_MSG(("StarWriterStruct::DatabaseName::read: can not read a SQL string\n"));
+      f << *this << "###SQL";
+      ascFile.addPos(pos);
+      ascFile.addNote(f.str().c_str());
+      zone.closeSWRecord('D', "StarDatabaseName");
+      return true;
+    }
+    m_sql=libstoff::getString(text);
+  }
+  if (zone.isCompatibleWith(0x11,0x22)){
+    if (!zone.readString(text)){
+      STOFF_DEBUG_MSG(("StarWriterStruct::DatabaseName::read: can not read a table name string\n"));
+      f << "###tableName";
+      ascFile.addPos(pos);
+      ascFile.addNote(f.str().c_str());
+      zone.closeSWRecord('D', "StarDatabaseName");
+      return true;
+    }
+    m_names[1]=libstoff::getString(text);
+  }
+  if (zone.isCompatibleWith(0x12,0x22, 0x101)){
+    int nCount=int(input->readULong(2));
+    if (nCount>0 && zone.isCompatibleWith(0x28)){
+      for (int i=0; i<nCount; ++i){
+        if (input->tell()>=zone.getRecordLastPosition()){
+          STOFF_DEBUG_MSG(("StarWriterStruct::DatabaseName::read: can not read a DBData\n"));
+          f << "###";
+          break;
+        }
+        Data data;
+        if (!zone.readString(text)){
+          STOFF_DEBUG_MSG(("StarWriterStruct::DatabaseName::read: can not read a table name string\n"));
+          f << "###dbDataName";
+          break;
+        }
+        data.m_name=libstoff::getString(text);
+        int positions[2];
+        for (int j=0; j<2; ++j) positions[i]=int(input->readULong(4));
+        data.m_selection=STOFFVec2i(positions[0],positions[1]);
+        m_dataList.push_back(data);
+      }
+    }
+  }
+  f << *this;
+  ascFile.addPos(pos);
+  ascFile.addNote(f.str().c_str());
+  zone.closeSWRecord(type, "StarDatabaseName");
+  return true;
+}

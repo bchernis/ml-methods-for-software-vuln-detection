@@ -1,0 +1,7 @@
+void kvm_define_shared_msr(unsigned slot, u32 msr){
+ if (slot >= shared_msrs_global.nr)
+  shared_msrs_global.nr = slot + 1;
+ shared_msrs_global.msrs[slot] = msr;
+
+ smp_wmb();
+}

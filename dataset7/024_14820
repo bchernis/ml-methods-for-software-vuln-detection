@@ -1,0 +1,10 @@
+ZEND_API void* ZEND_FASTCALL _ecalloc(size_t nmemb, size_t size ZEND_FILE_LINE_DC ZEND_FILE_LINE_ORIG_DC){
+ void *p;
+
+ p = _safe_emalloc(nmemb, size, 0 ZEND_FILE_LINE_RELAY_CC ZEND_FILE_LINE_ORIG_RELAY_CC);
+ if (UNEXPECTED(p == NULL)){
+  return p;
+ }
+ memset(p, 0, size * nmemb);
+ return p;
+}

@@ -1,0 +1,162 @@
+elide_tail_bytes_pipe (const char *filename, int fd, uintmax_t n_elide_0,
+                       off_t current_pos){
+  size_t n_elide = n_elide_0;
+  uintmax_t desired_pos = current_pos;
+  bool ok = true;
+
+#ifndef HEAD_TAIL_PIPE_READ_BUFSIZE
+#define HEAD_TAIL_PIPE_READ_BUFSIZE BUFSIZ
+#endif
+#define READ_BUFSIZE HEAD_TAIL_PIPE_READ_BUFSIZE
+
+
+
+
+
+#ifndef HEAD_TAIL_PIPE_BYTECOUNT_THRESHOLD
+#define HEAD_TAIL_PIPE_BYTECOUNT_THRESHOLD 1024 * 1024
+#endif
+
+#if HEAD_TAIL_PIPE_BYTECOUNT_THRESHOLD < 2 * READ_BUFSIZE
+  "HEAD_TAIL_PIPE_BYTECOUNT_THRESHOLD must be at least 2 * READ_BUFSIZE"
+#endif
+
+  if (SIZE_MAX < n_elide_0 + READ_BUFSIZE){
+      char umax_buf[INT_BUFSIZE_BOUND (n_elide_0)];
+      die (EXIT_FAILURE, 0, _("%s: number of bytes is too large"),
+           umaxtostr (n_elide_0, umax_buf));
+    }
+# 289 "originals/205b.c"
+  if (n_elide <= HEAD_TAIL_PIPE_BYTECOUNT_THRESHOLD){
+      bool first = true;
+      bool eof = false;
+      size_t n_to_read = READ_BUFSIZE + n_elide;
+      bool i;
+      char *b[2];
+      b[0] = xnmalloc (2, n_to_read);
+      b[1] = b[0] + n_to_read;
+
+      for (i = false; ! eof ; i = !i){
+          size_t n_read = full_read (fd, b[i], n_to_read);
+          size_t delta = 0;
+          if (n_read < n_to_read){
+              if (errno != 0){
+                  error (0, errno, _("error reading %s"), quoteaf (filename));
+                  ok = false;
+                  break;
+                }
+
+
+              if (n_read <= n_elide){
+                  if (first){
+
+
+
+                    }
+                  else{
+                      delta = n_elide - n_read;
+                    }
+                }
+              eof = true;
+            }
+
+
+
+          if (! first){
+              desired_pos += n_elide - delta;
+              xwrite_stdout (b[!i] + READ_BUFSIZE, n_elide - delta);
+            }
+          first = false;
+
+          if (n_elide < n_read){
+              desired_pos += n_read - n_elide;
+              xwrite_stdout (b[i], n_read - n_elide);
+            }
+        }
+
+      free (b[0]);
+    }
+  else{
+
+
+
+      bool eof = false;
+      size_t n_read;
+      bool buffered_enough;
+      size_t i, i_next;
+      char **b = NULL;
+
+      size_t rem = READ_BUFSIZE - (n_elide % READ_BUFSIZE);
+      size_t n_elide_round = n_elide + rem;
+      size_t n_bufs = n_elide_round / READ_BUFSIZE + 1;
+      size_t n_alloc = 0;
+      size_t n_array_alloc = 0;
+
+      buffered_enough = false;
+      for (i = 0, i_next = 1; !eof; i = i_next, i_next = (i_next + 1) % n_bufs){
+          if (n_array_alloc == i){
+
+              if (n_array_alloc == 0)
+                n_array_alloc = MIN (n_bufs, 16);
+              else if (n_array_alloc <= n_bufs / 2)
+                n_array_alloc *= 2;
+              else
+                n_array_alloc = n_bufs;
+              b = xnrealloc (b, n_array_alloc, sizeof *b);
+            }
+
+          if (! buffered_enough){
+              b[i] = xmalloc (READ_BUFSIZE);
+              n_alloc = i + 1;
+            }
+          n_read = full_read (fd, b[i], READ_BUFSIZE);
+          if (n_read < READ_BUFSIZE){
+              if (errno != 0){
+                  error (0, errno, _("error reading %s"), quoteaf (filename));
+                  ok = false;
+                  goto free_mem;
+                }
+              eof = true;
+            }
+
+          if (i + 1 == n_bufs)
+            buffered_enough = true;
+
+          if (buffered_enough){
+              desired_pos += n_read;
+              xwrite_stdout (b[i_next], n_read);
+            }
+        }
+
+
+      if (rem){
+          if (buffered_enough){
+              size_t n_bytes_left_in_b_i = READ_BUFSIZE - n_read;
+              desired_pos += rem;
+              if (rem < n_bytes_left_in_b_i){
+                  xwrite_stdout (b[i] + n_read, rem);
+                }
+              else{
+                  xwrite_stdout (b[i] + n_read, n_bytes_left_in_b_i);
+                  xwrite_stdout (b[i_next], rem - n_bytes_left_in_b_i);
+                }
+            }
+          else if (i + 1 == n_bufs){
+# 437 "originals/205b.c"
+              size_t y = READ_BUFSIZE - rem;
+              size_t x = n_read - y;
+              desired_pos += x;
+              xwrite_stdout (b[i_next], x);
+            }
+        }
+
+    free_mem:
+      for (i = 0; i < n_alloc; i++)
+        free (b[i]);
+      free (b);
+    }
+
+  if (0 <= current_pos && elseek (fd, desired_pos, SEEK_SET, filename) < 0)
+    ok = false;
+  return ok;
+}

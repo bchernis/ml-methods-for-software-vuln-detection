@@ -1,0 +1,27 @@
+static unsigned long emulator_get_cr(struct x86_emulate_ctxt *ctxt, int cr){
+ struct kvm_vcpu *vcpu = emul_to_vcpu(ctxt);
+ unsigned long value;
+
+ switch (cr){
+ case 0:
+  value = kvm_read_cr0(vcpu);
+  break;
+ case 2:
+  value = vcpu->arch.cr2;
+  break;
+ case 3:
+  value = kvm_read_cr3(vcpu);
+  break;
+ case 4:
+  value = kvm_read_cr4(vcpu);
+  break;
+ case 8:
+  value = kvm_get_cr8(vcpu);
+  break;
+ default:
+  kvm_err("%s: unexpected cr %u\n", __func__, cr);
+  return 0;
+ }
+
+ return value;
+}

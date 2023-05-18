@@ -1,0 +1,6 @@
+debug_width (char const *text, char const *lim){
+  size_t width = mbsnwidth (text, lim - text, 0);
+  while (text < lim)
+    width += (*text++ == '\t');
+  return width;
+}

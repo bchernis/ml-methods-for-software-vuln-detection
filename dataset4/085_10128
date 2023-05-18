@@ -1,0 +1,57 @@
+pipe_fork (int pipefds[2], size_t tries){
+#if HAVE_WORKING_FORK
+  struct tempnode *saved_temphead;
+  int saved_errno;
+  double wait_retry = 0.25;
+  pid_t pid IF_LINT ( = -1);
+  struct cs_status cs;
+
+  if (pipe (pipefds) < 0)
+    return -1;
+# 1044 "originals/214b.c"
+  if (nmerge + 1 < nprocs)
+    reap_some ();
+
+  while (tries--){
+
+
+      cs = cs_enter ();
+      saved_temphead = temphead;
+      temphead = NULL;
+
+      pid = fork ();
+      saved_errno = errno;
+      if (pid)
+        temphead = saved_temphead;
+
+      cs_leave (cs);
+      errno = saved_errno;
+
+      if (0 <= pid || errno != EAGAIN)
+        break;
+      else{
+          xnanosleep (wait_retry);
+          wait_retry *= 2;
+          reap_exited ();
+        }
+    }
+
+  if (pid < 0){
+      saved_errno = errno;
+      close (pipefds[0]);
+      close (pipefds[1]);
+      errno = saved_errno;
+    }
+  else if (pid == 0){
+      close (STDIN_FILENO);
+      close (STDOUT_FILENO);
+    }
+  else
+    ++nprocs;
+
+  return pid;
+
+#else
+  return -1;
+#endif
+}

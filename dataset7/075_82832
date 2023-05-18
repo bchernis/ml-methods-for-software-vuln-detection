@@ -1,0 +1,8 @@
+static int emulator_read_emulated(struct x86_emulate_ctxt *ctxt,
+      unsigned long addr,
+      void *val,
+      unsigned int bytes,
+      struct x86_exception *exception){
+ return emulator_read_write(ctxt, addr, val, bytes,
+       exception, &read_emultor);
+}

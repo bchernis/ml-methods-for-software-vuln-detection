@@ -1,0 +1,18 @@
+merge_loop (struct merge_node_queue *queue,
+            size_t total_lines, FILE *tfp, char const *temp_output){
+  while (1){
+      struct merge_node *node = queue_pop (queue);
+
+      if (node->level == MERGE_END){
+          unlock_node (node);
+
+          queue_insert (queue, node);
+          break;
+        }
+      mergelines_node (node, total_lines, tfp, temp_output);
+      queue_check_insert (queue, node);
+      queue_check_insert_parent (queue, node);
+
+      unlock_node (node);
+    }
+}

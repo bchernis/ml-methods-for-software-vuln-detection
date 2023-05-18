@@ -1,0 +1,14 @@
+rm_option_init (struct rm_options *x){
+  x->ignore_missing_files = false;
+  x->interactive = RMI_SOMETIMES;
+  x->one_file_system = false;
+  x->remove_empty_directories = false;
+  x->recursive = false;
+  x->root_dev_ino = NULL;
+  x->stdin_tty = isatty (STDIN_FILENO);
+  x->verbose = false;
+
+
+
+  x->require_restore_cwd = false;
+}

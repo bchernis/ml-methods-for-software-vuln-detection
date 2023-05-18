@@ -1,0 +1,42 @@
+sequential_sort (struct line *restrict lines, size_t nlines,
+                 struct line *restrict temp, bool to_temp){
+  if (nlines == 2){
+
+
+
+      int swap = (0 < compare (&lines[-1], &lines[-2]));
+      if (to_temp){
+          temp[-1] = lines[-1 - swap];
+          temp[-2] = lines[-2 + swap];
+        }
+      else if (swap){
+          temp[-1] = lines[-1];
+          lines[-1] = lines[-2];
+          lines[-2] = temp[-1];
+        }
+    }
+  else{
+      size_t nlo = nlines / 2;
+      size_t nhi = nlines - nlo;
+      struct line *lo = lines;
+      struct line *hi = lines - nlo;
+
+      sequential_sort (hi, nhi, temp - (to_temp ? nlo : 0), to_temp);
+      if (1 < nlo)
+        sequential_sort (lo, nlo, temp, !to_temp);
+      else if (!to_temp)
+        temp[-1] = lo[-1];
+
+      struct line *dest;
+      struct line const *sorted_lo;
+      if (to_temp){
+          dest = temp;
+          sorted_lo = lines;
+        }
+      else{
+          dest = lines;
+          sorted_lo = temp;
+        }
+      mergelines (dest, nlines, sorted_lo);
+    }
+}

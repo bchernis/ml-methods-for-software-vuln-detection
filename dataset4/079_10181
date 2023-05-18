@@ -1,0 +1,7 @@
+queue_insert (struct merge_node_queue *queue, struct merge_node *node){
+  pthread_mutex_lock (&queue->mutex);
+  heap_insert (queue->priority_queue, node);
+  node->queued = true;
+  pthread_cond_signal (&queue->cond);
+  pthread_mutex_unlock (&queue->mutex);
+}

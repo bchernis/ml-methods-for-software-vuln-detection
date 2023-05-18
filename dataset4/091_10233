@@ -1,0 +1,84 @@
+tail_file (struct File_spec *f, uintmax_t n_units){
+  int fd;
+  bool ok;
+
+  bool is_stdin = (STREQ (f->name, "-"));
+
+  if (is_stdin){
+      have_read_stdin = true;
+      fd = STDIN_FILENO;
+      xset_binary_mode (STDIN_FILENO, O_BINARY);
+    }
+  else
+    fd = open (f->name, O_RDONLY | O_BINARY);
+
+  f->tailable = !(reopen_inaccessible_files && fd == -1);
+
+  if (fd == -1){
+      if (forever){
+          f->fd = -1;
+          f->errnum = errno;
+          f->ignore = ! reopen_inaccessible_files;
+          f->ino = 0;
+          f->dev = 0;
+        }
+      error (0, errno, _("cannot open %s for reading"),
+             quoteaf (pretty_name (f)));
+      ok = false;
+    }
+  else{
+      uintmax_t read_pos;
+
+      if (print_headers)
+        write_header (pretty_name (f));
+      ok = tail (pretty_name (f), fd, n_units, &read_pos);
+      if (forever){
+          struct stat stats;
+
+#if TAIL_TEST_SLEEP
+
+
+
+          xnanosleep (1);
+#endif
+          f->errnum = ok - 1;
+          if (fstat (fd, &stats) < 0){
+              ok = false;
+              f->errnum = errno;
+              error (0, errno, _("error reading %s"),
+                     quoteaf (pretty_name (f)));
+            }
+          else if (!IS_TAILABLE_FILE_TYPE (stats.st_mode)){
+              ok = false;
+              f->errnum = -1;
+              f->tailable = false;
+              f->ignore = ! reopen_inaccessible_files;
+              error (0, 0, _("%s: cannot follow end of this type of file%s"),
+                     quotef (pretty_name (f)),
+                     f->ignore ? _("; giving up on this name") : "");
+            }
+
+          if (!ok){
+              f->ignore = ! reopen_inaccessible_files;
+              close_fd (fd, pretty_name (f));
+              f->fd = -1;
+            }
+          else{
+
+
+
+              record_open_fd (f, fd, read_pos, &stats, (is_stdin ? -1 : 1));
+              f->remote = fremote (fd, pretty_name (f));
+            }
+        }
+      else{
+          if (!is_stdin && close (fd)){
+              error (0, errno, _("error reading %s"),
+                     quoteaf (pretty_name (f)));
+              ok = false;
+            }
+        }
+    }
+
+  return ok;
+}

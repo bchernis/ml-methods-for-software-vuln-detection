@@ -1,0 +1,19 @@
+bool ImplReadMapMode(SvStream& rIStm, MapMode& rMapMode){
+    sal_Int16 nUnit(0);
+    rIStm.ReadInt16(nUnit);
+
+    Point aOrg;
+    ReadPair(rIStm, aOrg);
+
+    sal_Int32 nXNum(0), nXDenom(0), nYNum(0), nYDenom(0);
+    rIStm.ReadInt32(nXNum).ReadInt32(nXDenom).ReadInt32(nYNum).ReadInt32(nYDenom);
+
+    if (!rIStm.good() || nXDenom == 0 || nYDenom == 0){
+        SAL_WARN("vcl.gdi", "Parsing error: invalid mapmode fraction");
+        return false;
+    }
+
+    rMapMode = MapMode( (MapUnit) nUnit, aOrg, Fraction( nXNum, nXDenom ), Fraction( nYNum, nYDenom ) );
+
+    return true;
+}

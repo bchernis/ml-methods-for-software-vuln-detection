@@ -1,0 +1,51 @@
+void ImplReadExtendedPolyPolygonAction(SvStream& rIStm, tools::PolyPolygon& rPolyPoly){
+    rPolyPoly.Clear();
+    sal_uInt16 nPolygonCount(0);
+    rIStm.ReadUInt16( nPolygonCount );
+
+    if (!nPolygonCount)
+        return;
+
+    const size_t nMinRecordSize = sizeof(sal_uInt16);
+    const size_t nMaxRecords = rIStm.remainingSize() / nMinRecordSize;
+    if (nPolygonCount > nMaxRecords){
+        SAL_WARN("vcl.gdi", "Parsing error: " << nMaxRecords <<
+                 " max possible entries, but " << nPolygonCount << " claimed, truncating");
+        nPolygonCount = nMaxRecords;
+    }
+
+    for(sal_uInt16 a(0); a < nPolygonCount; a++){
+        sal_uInt16 nPointCount(0);
+        rIStm.ReadUInt16(nPointCount);
+
+        const size_t nMinPolygonSize = sizeof(sal_Int32) * 2;
+        const size_t nMaxPolygons = rIStm.remainingSize() / nMinPolygonSize;
+        if (nPointCount > nMaxPolygons){
+            SAL_WARN("vcl.gdi", "Parsing error: " << nMaxPolygons <<
+                     " max possible entries, but " << nPointCount << " claimed, truncating");
+            nPointCount = nMaxPolygons;
+        }
+
+        tools::Polygon aCandidate(nPointCount);
+
+        if (nPointCount){
+            for(sal_uInt16 b(0); b < nPointCount; b++){
+                ReadPair( rIStm , aCandidate[b] );
+            }
+
+            sal_uInt8 bHasFlags(int(false));
+            rIStm.ReadUChar( bHasFlags );
+
+            if(bHasFlags){
+                sal_uInt8 aPolyFlags(0);
+
+                for(sal_uInt16 c(0); c < nPointCount; c++){
+                    rIStm.ReadUChar( aPolyFlags );
+                    aCandidate.SetFlags(c, (PolyFlags)aPolyFlags);
+                }
+            }
+        }
+
+        rPolyPoly.Insert(aCandidate);
+    }
+}

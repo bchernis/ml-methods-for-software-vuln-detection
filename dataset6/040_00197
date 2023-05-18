@@ -1,0 +1,3 @@
+incompatible_options (char const *opts){
+  die (SORT_FAILURE, 0, _("options '-%s' are incompatible"), (opts));
+}

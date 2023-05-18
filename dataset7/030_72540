@@ -1,0 +1,29 @@
+static int tg3_request_firmware(struct tg3 *tp){
+ const __be32 *fw_data;
+
+ if (request_firmware(&tp->fw, tp->fw_needed, &tp->pdev->dev)){
+  netdev_err(tp->dev, "Failed to load firmware \"%s\"\n",
+      tp->fw_needed);
+  return -ENOENT;
+ }
+
+ fw_data = (void *)tp->fw->data;
+
+
+
+
+
+
+ tp->fw_len = be32_to_cpu(fw_data[2]);
+ if (tp->fw_len < (tp->fw->size - 12)){
+  netdev_err(tp->dev, "bogus length %d in \"%s\"\n",
+      tp->fw_len, tp->fw_needed);
+  release_firmware(tp->fw);
+  tp->fw = NULL;
+  return -EINVAL;
+ }
+
+
+ tp->fw_needed = NULL;
+ return 0;
+}

@@ -1,0 +1,24 @@
+bool PrintData::read(StarZone &zone){
+  STOFFInputStreamPtr input=zone.input();
+  libstoff::DebugFile &ascFile=zone.ascii();
+  libstoff::DebugStream f;
+  long pos=input->tell();
+  char type;
+  if (input->peek()!='8' || !zone.openSWRecord(type)){
+    input->seek(pos, librevenge::RVNG_SEEK_SET);
+    STOFF_DEBUG_MSG(("StarWriterStruct::PrintData::read: can not read a printData\n"));
+    return false;
+  }
+
+  f << "Entries(StarPrintData)[" << zone.getRecordLevel() << "]:";
+  m_flags=int(input->readULong(1));
+  int dim[2];
+  for (int i=0; i<2; ++i) dim[i]=int(input->readULong(2));
+  m_colRow=STOFFVec2i(dim[1],dim[0]);
+  for (int i=0; i<6; ++i) m_spacings[i]=int(input->readULong(2));
+  f << *this;
+  ascFile.addPos(pos);
+  ascFile.addNote(f.str().c_str());
+  zone.closeSWRecord(type, "StarPrintData");
+  return true;
+}

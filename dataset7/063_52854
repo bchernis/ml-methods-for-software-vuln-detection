@@ -1,0 +1,4 @@
+static unsigned long emulator_get_cached_segment_base(
+ struct x86_emulate_ctxt *ctxt, int seg){
+ return get_segment_base(emul_to_vcpu(ctxt), seg);
+}

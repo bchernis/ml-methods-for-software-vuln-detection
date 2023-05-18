@@ -1,0 +1,29 @@
+This tool is the implementation for the paper titled "Machine Learning Methods for Software Vulnerability Betection," by Boris Chernis and Rakesh Verma. Please see "Citation.bib" for further details.
+
+How to use the tool:
+0) Get a dataset consisting of .c files with and without vulnerabilities. The .c files containing strictly vulnerable functions should be digits followed by b.c. For example, 77b.c. The filenames of files containing strintly non-vulnerable functions should have an "a" instead of "b". All files should be in the originals/ directory.
+1) Run extractFunctions.bash. This is the master script. This will extract functions from originals/ directory (its subdirectories will NOT be traversed) and randomly select 100 vulnerable and non-vulnerable functions. These functions will be put into the extractedFunctions/ directory (its contents will first be deleted). Each file names containing "_1" in the name has a vulnerable function, and each file containing "_0" in the name has a non-vulnerable function.
+2) Run getStats.bash <dataset name> (read comments, tweak it to select features, feature selection option, and classifier)
+   Note: Other than classify.py (present in getStats.bash), you can also run classify_pca.py (for classification with default PCA parameters; uses same arguments as classify.py) and classify_bruteforce.py (runs classifier with ALL subsets of extracted features, so only use this if the number of extracted features is VERY small)
+
+Some dataset directories that I already created
+dataset1: bugs vs nobugs_github
+dataset4: half nobugs_linux and half nobugs_github vs bugs
+dataset5: 2:1 non-vulnerable to vulnerable
+dataset6: 4:1 non-vulnerable to vulnerable
+dataset7: 8:1 non-vulnerable to vulnerable
+
+Other scripts:
+discardChars.bash: Generates Method 1- and Method 2-preprocessed datasets (see below). Only needed for n-gram tests, since the trivial feature tests have this functionality built in (see documentation in getStats.bash). Please modify before running.
+
+Pre-processing methods:
+Method 1: Simply discard all alphanumeric characters
+Method 2:
+1) Discard all numbers except for 1 and 0 (1 and 0 often have significance).
+2) Replace the top 8 most frequent keywords with numbers 2-9. The frequencies of these keywords were extracted using a shell script that grepped the input data for every keyword (taken from \cite{kernighan2006c}), and these keywords were reverse-sorted by frequency of occurrence, as shown in the table below.
+3) Discard alphabetic characters.
+
+
+
+Suffix Tree classification
+Cd into the suffixTrees/ directory, and simply run ST. The program prints the results to the screen (with different "threshold" values), and also outputs the same results to "out.txt". Make sure the suffixTrees/ham and suffixTrees spam directories have files (C functions or e-mails) before you do this. If you are classifying C functions, you probably want to put vulnerable functions in spam and non-vulnerable functions in ham. The vulnerable and non-vulnerabl functions used in this study are located in the enron/ham and enron/spam directories. Feel free to modify the code (ST.cpp) and recompile with g++. More ham and spam e-mails are available at https://www.cs.cmu.edu/~./enron/ 

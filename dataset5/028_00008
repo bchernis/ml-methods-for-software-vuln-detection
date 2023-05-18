@@ -1,0 +1,58 @@
+re_protect (char const *const_dst_name, size_t src_offset,
+            struct dir_attr *attr_list, const struct cp_options *x){
+  struct dir_attr *p;
+  char *dst_name;
+  char *src_name;
+
+  ASSIGN_STRDUPA (dst_name, const_dst_name);
+  src_name = dst_name + src_offset;
+
+  for (p = attr_list; p; p = p->next){
+      dst_name[p->slash_offset] = '\0';
+
+
+
+
+
+      if (x->preserve_timestamps){
+          struct timespec timespec[2];
+
+          timespec[0] = get_stat_atime (&p->st);
+          timespec[1] = get_stat_mtime (&p->st);
+
+          if (utimens (dst_name, timespec)){
+              error (0, errno, _("failed to preserve times for %s"),
+                     quoteaf (dst_name));
+              return false;
+            }
+        }
+
+      if (x->preserve_ownership){
+          if (lchown (dst_name, p->st.st_uid, p->st.st_gid) != 0){
+              if (! chown_failure_ok (x)){
+                  error (0, errno, _("failed to preserve ownership for %s"),
+                         quoteaf (dst_name));
+                  return false;
+                }
+
+
+              ignore_value (lchown (dst_name, -1, p->st.st_gid));
+            }
+        }
+
+      if (x->preserve_mode){
+          if (copy_acl (src_name, -1, dst_name, -1, p->st.st_mode) != 0)
+            return false;
+        }
+      else if (p->restore_mode){
+          if (lchmod (dst_name, p->st.st_mode) != 0){
+              error (0, errno, _("failed to preserve permissions for %s"),
+                     quoteaf (dst_name));
+              return false;
+            }
+        }
+
+      dst_name[p->slash_offset] = '/';
+    }
+  return true;
+}

@@ -1,0 +1,8 @@
+static int twoDots(void){
+    int i;
+    for (i = yyleng-2; i >= 0; i--){
+ if (((unsigned char)yytext[i]) == '.')
+     return 1;
+    }
+    return 0;
+}

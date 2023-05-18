@@ -1,0 +1,4 @@
+skip_construct (struct Spec_list *s){
+  s->tail = s->tail->next;
+  s->state = NEW_ELEMENT;
+}

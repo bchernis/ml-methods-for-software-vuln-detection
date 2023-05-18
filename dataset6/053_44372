@@ -1,0 +1,21 @@
+sug_maketable(spellinfo_T *spin){
+    garray_T ga;
+    int res = OK;
+
+
+
+    spin->si_spellbuf = open_spellbuf();
+    if (spin->si_spellbuf == NULL)
+ return FAIL;
+
+
+
+    ga_init2(&ga, 1, 100);
+
+
+    if (sug_filltable(spin, spin->si_foldroot->wn_sibling, 0, &ga) == -1)
+ res = FAIL;
+
+    ga_clear(&ga);
+    return res;
+}

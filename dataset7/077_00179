@@ -1,0 +1,5 @@
+queue_destroy (struct merge_node_queue *queue){
+  heap_free (queue->priority_queue);
+  pthread_cond_destroy (&queue->cond);
+  pthread_mutex_destroy (&queue->mutex);
+}

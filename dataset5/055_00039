@@ -1,0 +1,375 @@
+rfbBool rfbProcessFileTransfer(rfbClientPtr cl, uint8_t contentType, uint8_t contentParam, uint32_t size, uint32_t length){
+    char *buffer=NULL, *p=NULL;
+    int retval=0;
+    char filename1[MAX_PATH];
+    char filename2[MAX_PATH];
+    char szFileTime[MAX_PATH];
+    struct stat statbuf;
+    uint32_t sizeHtmp=0;
+    int n=0;
+    char timespec[64];
+#ifdef LIBVNCSERVER_HAVE_LIBZ
+    unsigned char compBuff[sz_rfbBlockSize];
+    unsigned long nRawBytes = sz_rfbBlockSize;
+    int nRet = 0;
+#endif
+
+    FILEXFER_ALLOWED_OR_CLOSE_AND_RETURN("", cl, FALSE);
+
+
+
+
+
+    switch (contentType){
+    case rfbDirContentRequest:
+        switch (contentParam){
+        case rfbRDrivesList:
+# 46 "originals/25b.c"
+            filename2[0]='C';
+            filename2[1]=':';
+            filename2[2]='l';
+            filename2[3]=0;
+            filename2[4]=0;
+            retval = rfbSendFileTransferMessage(cl, rfbDirPacket, rfbADrivesList, 0, 5, filename2);
+            if (buffer!=NULL) free(buffer);
+            return retval;
+            break;
+        case rfbRDirContent:
+
+
+
+            if ((buffer = rfbProcessFileTransferReadBuffer(cl, length))==NULL) return FALSE;
+            retval = rfbSendDirContent(cl, length, buffer);
+            if (buffer!=NULL) free(buffer);
+            return retval;
+        }
+        break;
+
+    case rfbDirPacket:
+        rfbLog("rfbProcessFileTransfer() rfbDirPacket\n");
+        break;
+    case rfbFileAcceptHeader:
+        rfbLog("rfbProcessFileTransfer() rfbFileAcceptHeader\n");
+        break;
+    case rfbCommandReturn:
+        rfbLog("rfbProcessFileTransfer() rfbCommandReturn\n");
+        break;
+    case rfbFileChecksums:
+
+        rfbLog("rfbProcessFileTransfer() rfbFileChecksums\n");
+        break;
+    case rfbFileTransferAccess:
+        rfbLog("rfbProcessFileTransfer() rfbFileTransferAccess\n");
+        break;
+
+
+
+
+
+    case rfbFileTransferRequest:
+
+
+
+
+        if ((buffer = rfbProcessFileTransferReadBuffer(cl, length))==NULL) return FALSE;
+
+        if (!rfbFilenameTranslate2UNIX(cl, buffer, filename1, sizeof(filename1))){
+          if (buffer!=NULL) free(buffer);
+          return FALSE;
+        }
+        cl->fileTransfer.fd=open(filename1, O_RDONLY, 0744);
+
+
+
+        if (DB) rfbLog("rfbProcessFileTransfer() rfbFileTransferRequest(\"%s\"->\"%s\") Open: %s fd=%d\n", buffer, filename1, (cl->fileTransfer.fd==-1?"Failed":"Success"), cl->fileTransfer.fd);
+
+        if (cl->fileTransfer.fd!=-1){
+            if (fstat(cl->fileTransfer.fd, &statbuf)!=0){
+                close(cl->fileTransfer.fd);
+                cl->fileTransfer.fd=-1;
+            }
+            else{
+
+              strftime(timespec, sizeof(timespec), "%m/%d/%Y %H:%M",gmtime(&statbuf.st_ctime));
+              buffer=realloc(buffer, length + strlen(timespec) + 2);
+              if (buffer==NULL){
+                  rfbLog("rfbProcessFileTransfer() rfbFileTransferRequest: Failed to malloc %d bytes\n", length + strlen(timespec) + 2);
+                  return FALSE;
+              }
+              strcat(buffer,",");
+              strcat(buffer, timespec);
+              length = strlen(buffer);
+              if (DB) rfbLog("rfbProcessFileTransfer() buffer is now: \"%s\"\n", buffer);
+            }
+        }
+
+
+        cl->fileTransfer.compressionEnabled = (size==1);
+
+
+
+
+
+
+        retval = rfbSendFileTransferMessage(cl, rfbFileHeader, 0, (cl->fileTransfer.fd==-1 ? -1 : statbuf.st_size), length, buffer);
+
+        if (cl->fileTransfer.fd==-1){
+            if (buffer!=NULL) free(buffer);
+            return retval;
+        }
+
+        cl->fileTransfer.fileSize = statbuf.st_size;
+        cl->fileTransfer.numPackets = statbuf.st_size / sz_rfbBlockSize;
+        cl->fileTransfer.receiving = 0;
+        cl->fileTransfer.sending = 0;
+
+
+        sizeHtmp = 0;
+        LOCK(cl->sendMutex);
+        if (rfbWriteExact(cl, (char *)&sizeHtmp, 4) < 0){
+          rfbLogPerror("rfbProcessFileTransfer: write");
+          rfbCloseClient(cl);
+          UNLOCK(cl->sendMutex);
+          if (buffer!=NULL) free(buffer);
+          return FALSE;
+        }
+        UNLOCK(cl->sendMutex);
+        break;
+
+    case rfbFileHeader:
+
+        if (size==-1){
+            rfbLog("rfbProcessFileTransfer() rfbFileHeader (error, aborting)\n");
+            close(cl->fileTransfer.fd);
+            cl->fileTransfer.fd=-1;
+            return TRUE;
+        }
+
+
+
+
+
+
+        cl->fileTransfer.sending=1;
+        return rfbSendFileTransferChunk(cl);
+        break;
+
+
+
+
+
+
+    case rfbFileTransferOffer:
+
+
+
+
+
+
+        if ((buffer = rfbProcessFileTransferReadBuffer(cl, length))==NULL) return FALSE;
+
+
+        p = strrchr(buffer, ',');
+        if (p!=NULL){
+            *p = '\0';
+            strcpy(szFileTime, p+1);
+        } else
+            szFileTime[0]=0;
+
+
+
+
+        if ((n = rfbReadExact(cl, (char *)&sizeHtmp, 4)) <= 0){
+            if (n != 0)
+                rfbLogPerror("rfbProcessFileTransfer: read sizeHtmp");
+            rfbCloseClient(cl);
+
+            if (buffer!=NULL) free(buffer);
+            return FALSE;
+        }
+        sizeHtmp = Swap32IfLE(sizeHtmp);
+
+        if (!rfbFilenameTranslate2UNIX(cl, buffer, filename1, sizeof(filename1))){
+          if (buffer!=NULL) free(buffer);
+          return FALSE;
+        }
+
+
+
+
+        cl->fileTransfer.fd=open(filename1, O_CREAT|O_WRONLY|O_TRUNC, 0744);
+        if (DB) rfbLog("rfbProcessFileTransfer() rfbFileTransferOffer(\"%s\"->\"%s\") %s %s fd=%d\n", buffer, filename1, (cl->fileTransfer.fd==-1?"Failed":"Success"), (cl->fileTransfer.fd==-1?strerror(errno):""), cl->fileTransfer.fd);
+
+
+
+
+        retval = rfbSendFileTransferMessage(cl, rfbFileAcceptHeader, 0, (cl->fileTransfer.fd==-1 ? -1 : 0), length, buffer);
+        if (cl->fileTransfer.fd==-1){
+            free(buffer);
+            return retval;
+        }
+
+
+        cl->fileTransfer.fileSize = size;
+        cl->fileTransfer.numPackets = size / sz_rfbBlockSize;
+        cl->fileTransfer.receiving = 1;
+        cl->fileTransfer.sending = 0;
+        break;
+
+    case rfbFilePacket:
+
+
+
+        if ((buffer = rfbProcessFileTransferReadBuffer(cl, length))==NULL) return FALSE;
+        if (cl->fileTransfer.fd!=-1){
+
+            if (size==0)
+                retval=write(cl->fileTransfer.fd, buffer, length);
+            else{
+#ifdef LIBVNCSERVER_HAVE_LIBZ
+
+                nRet = uncompress(compBuff,&nRawBytes,(const unsigned char*)buffer, length);
+  if(nRet == Z_OK)
+    retval=write(cl->fileTransfer.fd, (char*)compBuff, nRawBytes);
+  else
+    retval = -1;
+#else
+
+                retval=write(cl->fileTransfer.fd, buffer, length);
+#endif
+            }
+            if (retval==-1){
+                close(cl->fileTransfer.fd);
+                cl->fileTransfer.fd=-1;
+                cl->fileTransfer.sending = 0;
+                cl->fileTransfer.receiving = 0;
+            }
+        }
+        break;
+
+    case rfbEndOfFile:
+        if (DB) rfbLog("rfbProcessFileTransfer() rfbEndOfFile\n");
+
+
+        if (cl->fileTransfer.fd!=-1)
+            close(cl->fileTransfer.fd);
+        cl->fileTransfer.fd=-1;
+        cl->fileTransfer.sending = 0;
+        cl->fileTransfer.receiving = 0;
+        break;
+
+    case rfbAbortFileTransfer:
+        if (DB) rfbLog("rfbProcessFileTransfer() rfbAbortFileTransfer\n");
+
+
+        if (cl->fileTransfer.fd!=-1){
+            close(cl->fileTransfer.fd);
+            cl->fileTransfer.fd=-1;
+            cl->fileTransfer.sending = 0;
+            cl->fileTransfer.receiving = 0;
+        }
+        else{
+
+
+
+            if (contentParam == 0){
+                rfbLog("rfbProcessFileTransfer() File Transfer Permission DENIED! (Client Version <=RC18)\n");
+
+                return rfbSendFileTransferMessage(cl, rfbAbortFileTransfer, 0, -1, 0, "");
+            }
+
+            if (cl->screen->getFileTransferPermission!=NULL){
+                if (cl->screen->getFileTransferPermission(cl)==TRUE){
+                    rfbLog("rfbProcessFileTransfer() File Transfer Permission Granted!\n");
+                    return rfbSendFileTransferMessage(cl, rfbFileTransferAccess, 0, 1 , 0, "");
+                }
+                else{
+                    rfbLog("rfbProcessFileTransfer() File Transfer Permission DENIED!\n");
+                    return rfbSendFileTransferMessage(cl, rfbFileTransferAccess, 0, -1 , 0, "");
+                }
+            }
+            else{
+                if (cl->screen->permitFileTransfer){
+                    rfbLog("rfbProcessFileTransfer() File Transfer Permission Granted!\n");
+                    return rfbSendFileTransferMessage(cl, rfbFileTransferAccess, 0, 1 , 0, "");
+                }
+                else{
+                    rfbLog("rfbProcessFileTransfer() File Transfer Permission DENIED by default!\n");
+                    return rfbSendFileTransferMessage(cl, rfbFileTransferAccess, 0, -1 , 0, "");
+                }
+
+            }
+        }
+        break;
+
+
+    case rfbCommand:
+
+
+
+        if ((buffer = rfbProcessFileTransferReadBuffer(cl, length))==NULL) return FALSE;
+        switch (contentParam){
+        case rfbCDirCreate:
+            if (!rfbFilenameTranslate2UNIX(cl, buffer, filename1, sizeof(filename1))){
+              if (buffer!=NULL) free(buffer);
+              return FALSE;
+            }
+
+            retval = mkdir(filename1, 0755);
+            if (DB) rfbLog("rfbProcessFileTransfer() rfbCommand: rfbCDirCreate(\"%s\"->\"%s\") %s\n", buffer, filename1, (retval==-1?"Failed":"Success"));
+
+
+            retval = rfbSendFileTransferMessage(cl, rfbCommandReturn, rfbADirCreate, retval, length, buffer);
+            if (buffer!=NULL) free(buffer);
+            return retval;
+        case rfbCFileDelete:
+            if (!rfbFilenameTranslate2UNIX(cl, buffer, filename1, sizeof(filename1))){
+              if (buffer!=NULL) free(buffer);
+              return FALSE;
+            }
+
+            if (stat(filename1,&statbuf)==0){
+                if (S_ISDIR(statbuf.st_mode))
+                    retval = rmdir(filename1);
+                else
+                    retval = unlink(filename1);
+            }
+            else retval=-1;
+            retval = rfbSendFileTransferMessage(cl, rfbCommandReturn, rfbAFileDelete, retval, length, buffer);
+            if (buffer!=NULL) free(buffer);
+            return retval;
+        case rfbCFileRename:
+            p = strrchr(buffer, '*');
+            if (p != NULL){
+
+                *p = '\0';
+                if (!rfbFilenameTranslate2UNIX(cl, buffer, filename1, sizeof(filename1))){
+                  if (buffer!=NULL) free(buffer);
+                  return FALSE;
+                }
+
+                if (!rfbFilenameTranslate2UNIX(cl, p+1, filename2, sizeof(filename2))){
+                  if (buffer!=NULL) free(buffer);
+                  return FALSE;
+                }
+
+                retval = rename(filename1,filename2);
+                if (DB) rfbLog("rfbProcessFileTransfer() rfbCommand: rfbCFileRename(\"%s\"->\"%s\" -->> \"%s\"->\"%s\") %s\n", buffer, filename1, p+1, filename2, (retval==-1?"Failed":"Success"));
+
+
+
+                *p = '*';
+                retval = rfbSendFileTransferMessage(cl, rfbCommandReturn, rfbAFileRename, retval, length, buffer);
+                if (buffer!=NULL) free(buffer);
+                return retval;
+            }
+            break;
+        }
+
+        break;
+    }
+
+
+    if (buffer!=NULL) free(buffer);
+    return TRUE;
+}

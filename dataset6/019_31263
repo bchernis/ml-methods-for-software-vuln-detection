@@ -1,0 +1,16 @@
+static int send_xmessage_using_XAUTHORITY(struct proclistlist *pll,int lokke,char *message){
+
+  if(lokke==pll->length)
+    return 0;{
+    char *xa_filename=get_pid_environ_val(pll->proclist[lokke].pid,"XAUTHORITY");
+    if(xa_filename!=NULL){
+      if(send_xmessage(xa_filename,message)==1){
+ free(xa_filename);
+ return 1;
+      }
+    }
+    free(xa_filename);
+  }
+
+  return send_xmessage_using_XAUTHORITY(pll,lokke+1,message);
+}

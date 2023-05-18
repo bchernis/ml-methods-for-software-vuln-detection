@@ -1,0 +1,309 @@
+u_savecommon(
+    linenr_T top,
+    linenr_T bot,
+    linenr_T newbot,
+    int reload){
+    linenr_T lnum;
+    long i;
+    u_header_T *uhp;
+    u_header_T *old_curhead;
+    u_entry_T *uep;
+    u_entry_T *prev_uep;
+    long size;
+
+    if (!reload){
+
+
+ if (!undo_allowed())
+     return FAIL;
+
+#ifdef FEAT_NETBEANS_INTG
+
+
+
+
+ if (netbeans_active()){
+     if (netbeans_is_guarded(top, bot)){
+  EMSG(_(e_guarded));
+  return FAIL;
+     }
+     if (curbuf->b_p_ro){
+  EMSG(_(e_nbreadonly));
+  return FAIL;
+     }
+ }
+#endif
+
+#ifdef FEAT_AUTOCMD
+
+
+
+
+
+
+ change_warning(0);
+ if (bot > curbuf->b_ml.ml_line_count + 1){
+
+
+     EMSG(_("E881: Line count changed unexpectedly"));
+     return FAIL;
+ }
+#endif
+    }
+
+#ifdef U_DEBUG
+    u_check(FALSE);
+#endif
+
+    size = bot - top - 1;
+
+
+
+
+    if (curbuf->b_u_synced){
+#ifdef FEAT_JUMPLIST
+
+ curbuf->b_new_change = TRUE;
+#endif
+
+ if (get_undolevel() >= 0){
+
+
+
+
+     uhp = (u_header_T *)U_ALLOC_LINE(sizeof(u_header_T));
+     if (uhp == NULL)
+  goto nomem;
+#ifdef U_DEBUG
+     uhp->uh_magic = UH_MAGIC;
+#endif
+ }
+ else
+     uhp = NULL;
+
+
+
+
+
+ old_curhead = curbuf->b_u_curhead;
+ if (old_curhead != NULL){
+     curbuf->b_u_newhead = old_curhead->uh_next.ptr;
+     curbuf->b_u_curhead = NULL;
+ }
+
+
+
+
+ while (curbuf->b_u_numhead > get_undolevel()
+            && curbuf->b_u_oldhead != NULL){
+     u_header_T *uhfree = curbuf->b_u_oldhead;
+
+     if (uhfree == old_curhead)
+
+  u_freebranch(curbuf, uhfree, &old_curhead);
+     else if (uhfree->uh_alt_next.ptr == NULL)
+
+  u_freeheader(curbuf, uhfree, &old_curhead);
+     else{
+
+  while (uhfree->uh_alt_next.ptr != NULL)
+      uhfree = uhfree->uh_alt_next.ptr;
+  u_freebranch(curbuf, uhfree, &old_curhead);
+     }
+#ifdef U_DEBUG
+     u_check(TRUE);
+#endif
+ }
+
+ if (uhp == NULL){
+     if (old_curhead != NULL)
+  u_freebranch(curbuf, old_curhead, NULL);
+     curbuf->b_u_synced = FALSE;
+     return OK;
+ }
+
+ uhp->uh_prev.ptr = NULL;
+ uhp->uh_next.ptr = curbuf->b_u_newhead;
+ uhp->uh_alt_next.ptr = old_curhead;
+ if (old_curhead != NULL){
+     uhp->uh_alt_prev.ptr = old_curhead->uh_alt_prev.ptr;
+     if (uhp->uh_alt_prev.ptr != NULL)
+  uhp->uh_alt_prev.ptr->uh_alt_next.ptr = uhp;
+     old_curhead->uh_alt_prev.ptr = uhp;
+     if (curbuf->b_u_oldhead == old_curhead)
+  curbuf->b_u_oldhead = uhp;
+ }
+ else
+     uhp->uh_alt_prev.ptr = NULL;
+ if (curbuf->b_u_newhead != NULL)
+     curbuf->b_u_newhead->uh_prev.ptr = uhp;
+
+ uhp->uh_seq = ++curbuf->b_u_seq_last;
+ curbuf->b_u_seq_cur = uhp->uh_seq;
+ uhp->uh_time = vim_time();
+ uhp->uh_save_nr = 0;
+ curbuf->b_u_time_cur = uhp->uh_time + 1;
+
+ uhp->uh_walk = 0;
+ uhp->uh_entry = NULL;
+ uhp->uh_getbot_entry = NULL;
+ uhp->uh_cursor = curwin->w_cursor;
+#ifdef FEAT_VIRTUALEDIT
+ if (virtual_active() && curwin->w_cursor.coladd > 0)
+     uhp->uh_cursor_vcol = getviscol();
+ else
+     uhp->uh_cursor_vcol = -1;
+#endif
+
+
+ uhp->uh_flags = (curbuf->b_changed ? UH_CHANGED : 0) +
+         ((curbuf->b_ml.ml_flags & ML_EMPTY) ? UH_EMPTYBUF : 0);
+
+
+ mch_memmove(uhp->uh_namedm, curbuf->b_namedm, sizeof(pos_T) * NMARKS);
+ uhp->uh_visual = curbuf->b_visual;
+
+ curbuf->b_u_newhead = uhp;
+ if (curbuf->b_u_oldhead == NULL)
+     curbuf->b_u_oldhead = uhp;
+ ++curbuf->b_u_numhead;
+    }
+    else{
+ if (get_undolevel() < 0)
+     return OK;
+# 579 "originals/77a.c"
+ if (size == 1){
+     uep = u_get_headentry();
+     prev_uep = NULL;
+     for (i = 0; i < 10; ++i){
+  if (uep == NULL)
+      break;
+
+
+
+  if ((curbuf->b_u_newhead->uh_getbot_entry != uep
+       ? (uep->ue_top + uep->ue_size + 1
+    != (uep->ue_bot == 0
+        ? curbuf->b_ml.ml_line_count + 1
+        : uep->ue_bot))
+       : uep->ue_lcount != curbuf->b_ml.ml_line_count)
+   || (uep->ue_size > 1
+       && top >= uep->ue_top
+       && top + 2 <= uep->ue_top + uep->ue_size + 1))
+      break;
+
+
+  if (uep->ue_size == 1 && uep->ue_top == top){
+      if (i > 0){
+
+
+
+   u_getbot();
+   curbuf->b_u_synced = FALSE;
+
+
+
+
+
+
+
+   prev_uep->ue_next = uep->ue_next;
+   uep->ue_next = curbuf->b_u_newhead->uh_entry;
+   curbuf->b_u_newhead->uh_entry = uep;
+      }
+
+
+      if (newbot != 0)
+   uep->ue_bot = newbot;
+      else if (bot > curbuf->b_ml.ml_line_count)
+   uep->ue_bot = 0;
+      else{
+   uep->ue_lcount = curbuf->b_ml.ml_line_count;
+   curbuf->b_u_newhead->uh_getbot_entry = uep;
+      }
+      return OK;
+  }
+  prev_uep = uep;
+  uep = uep->ue_next;
+     }
+ }
+
+
+ u_getbot();
+    }
+
+#if !defined(UNIX) && !defined(WIN32)
+
+
+
+
+    if (size >= 8000)
+ goto nomem;
+#endif
+
+
+
+
+    uep = (u_entry_T *)U_ALLOC_LINE(sizeof(u_entry_T));
+    if (uep == NULL)
+ goto nomem;
+    vim_memset(uep, 0, sizeof(u_entry_T));
+#ifdef U_DEBUG
+    uep->ue_magic = UE_MAGIC;
+#endif
+
+    uep->ue_size = size;
+    uep->ue_top = top;
+    if (newbot != 0)
+ uep->ue_bot = newbot;
+
+
+
+
+    else if (bot > curbuf->b_ml.ml_line_count)
+ uep->ue_bot = 0;
+    else{
+ uep->ue_lcount = curbuf->b_ml.ml_line_count;
+ curbuf->b_u_newhead->uh_getbot_entry = uep;
+    }
+
+    if (size > 0){
+ if ((uep->ue_array = (char_u **)U_ALLOC_LINE(
+         sizeof(char_u *) * size)) == NULL){
+     u_freeentry(uep, 0L);
+     goto nomem;
+ }
+ for (i = 0, lnum = top + 1; i < size; ++i){
+     fast_breakcheck();
+     if (got_int){
+  u_freeentry(uep, i);
+  return FAIL;
+     }
+     if ((uep->ue_array[i] = u_save_line(lnum++)) == NULL){
+  u_freeentry(uep, i);
+  goto nomem;
+     }
+ }
+    }
+    else
+ uep->ue_array = NULL;
+    uep->ue_next = curbuf->b_u_newhead->uh_entry;
+    curbuf->b_u_newhead->uh_entry = uep;
+    curbuf->b_u_synced = FALSE;
+    undo_undoes = FALSE;
+
+#ifdef U_DEBUG
+    u_check(FALSE);
+#endif
+    return OK;
+
+nomem:
+    msg_silent = 0;
+    if (ask_yesno((char_u *)_("No undo possible; continue anyway"), TRUE)
+               == 'y'){
+ undo_off = TRUE;
+ return OK;
+    }
+    do_outofmem_msg((long_u)0);
+    return FAIL;
+}

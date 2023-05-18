@@ -1,0 +1,20 @@
+void sock_wfree(struct sk_buff *skb){
+ struct sock *sk = skb->sk;
+ unsigned int len = skb->truesize;
+
+ if (!sock_flag(sk, SOCK_USE_WRITE_QUEUE)){
+
+
+
+
+  atomic_sub(len - 1, &sk->sk_wmem_alloc);
+  sk->sk_write_space(sk);
+  len = 1;
+ }
+
+
+
+
+ if (atomic_sub_and_test(len, &sk->sk_wmem_alloc))
+  __sk_free(sk);
+}

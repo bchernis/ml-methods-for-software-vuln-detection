@@ -1,0 +1,6 @@
+static zend_always_inline void zend_mm_free_large(zend_mm_heap *heap, zend_mm_chunk *chunk, int page_num, int pages_count){
+#if ZEND_MM_STAT
+ heap->size -= pages_count * ZEND_MM_PAGE_SIZE;
+#endif
+ zend_mm_free_pages(heap, chunk, page_num, pages_count);
+}

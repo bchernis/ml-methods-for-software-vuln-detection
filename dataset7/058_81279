@@ -1,0 +1,259 @@
+iso9660_close(struct archive_write *a){
+ struct iso9660 *iso9660;
+ int ret, blocks;
+
+ iso9660 = a->format_data;
+
+
+
+
+ if (wb_remaining(a) > 0){
+  ret = wb_write_out(a);
+  if (ret < 0)
+   return (ret);
+ }
+
+
+
+
+#ifdef DEBUG
+ if (iso9660->birth_time == 0)
+#endif
+  time(&(iso9660->birth_time));
+
+
+
+
+ if (iso9660->opt.boot){
+
+  ret = isoent_find_out_boot_file(a, iso9660->primary.rootent);
+  if (ret < 0)
+   return (ret);
+
+
+  ret = zisofs_rewind_boot_file(a);
+  if (ret < 0)
+   return (ret);
+
+  if (wb_remaining(a) > 0){
+   ret = wb_write_out(a);
+   if (ret < 0)
+    return (ret);
+  }
+
+  ret = isoent_create_boot_catalog(a, iso9660->primary.rootent);
+  if (ret < 0)
+   return (ret);
+ }
+
+
+
+
+ if (iso9660->opt.joliet){
+
+  ret = isoent_clone_tree(a, &(iso9660->joliet.rootent),
+      iso9660->primary.rootent);
+  if (ret < 0)
+   return (ret);
+
+
+
+  if (iso9660->sconv_to_utf16be == NULL){
+   iso9660->sconv_to_utf16be =
+       archive_string_conversion_to_charset(
+    &(a->archive), "UTF-16BE", 1);
+   if (iso9660->sconv_to_utf16be == NULL)
+
+    return (ARCHIVE_FATAL);
+   iso9660->sconv_from_utf16be =
+       archive_string_conversion_from_charset(
+    &(a->archive), "UTF-16BE", 1);
+   if (iso9660->sconv_from_utf16be == NULL)
+
+    return (ARCHIVE_FATAL);
+  }
+ }
+
+
+
+
+ ret = isoent_make_path_table(a);
+ if (ret < 0)
+  return (ret);
+
+
+
+
+
+ blocks = SYSTEM_AREA_BLOCK
+  + PRIMARY_VOLUME_DESCRIPTOR_BLOCK
+  + VOLUME_DESCRIPTOR_SET_TERMINATOR_BLOCK
+  + NON_ISO_FILE_SYSTEM_INFORMATION_BLOCK;
+ if (iso9660->opt.boot)
+  blocks += BOOT_RECORD_DESCRIPTOR_BLOCK;
+ if (iso9660->opt.joliet)
+  blocks += SUPPLEMENTARY_VOLUME_DESCRIPTOR_BLOCK;
+ if (iso9660->opt.iso_level == 4)
+  blocks += SUPPLEMENTARY_VOLUME_DESCRIPTOR_BLOCK;
+
+
+ iso9660->primary.location_type_L_path_table = blocks;
+ blocks += iso9660->primary.path_table_block;
+ iso9660->primary.location_type_M_path_table = blocks;
+ blocks += iso9660->primary.path_table_block;
+ if (iso9660->opt.joliet){
+  iso9660->joliet.location_type_L_path_table = blocks;
+  blocks += iso9660->joliet.path_table_block;
+  iso9660->joliet.location_type_M_path_table = blocks;
+  blocks += iso9660->joliet.path_table_block;
+ }
+
+
+ isoent_setup_directory_location(iso9660, blocks,
+     &(iso9660->primary));
+ blocks += iso9660->primary.total_dir_block;
+ if (iso9660->opt.joliet){
+  isoent_setup_directory_location(iso9660, blocks,
+      &(iso9660->joliet));
+  blocks += iso9660->joliet.total_dir_block;
+ }
+
+ if (iso9660->opt.rr){
+  iso9660->location_rrip_er = blocks;
+  blocks += RRIP_ER_BLOCK;
+ }
+
+
+  isoent_setup_file_location(iso9660, blocks);
+ blocks += iso9660->total_file_block;
+ if (iso9660->opt.boot && iso9660->opt.boot_info_table){
+  ret = setup_boot_information(a);
+  if (ret < 0)
+   return (ret);
+ }
+
+
+ iso9660->volume_space_size = blocks;
+ if (iso9660->opt.pad)
+  iso9660->volume_space_size += PADDING_BLOCK;
+ iso9660->volume_sequence_number = 1;
+
+
+
+
+
+
+
+ iso9660->wbuff_remaining = wb_buffmax();
+ iso9660->wbuff_type = WB_TO_STREAM;
+ iso9660->wbuff_offset = 0;
+ iso9660->wbuff_written = 0;
+ iso9660->wbuff_tail = 0;
+
+
+ ret = write_null(a, SYSTEM_AREA_BLOCK * LOGICAL_BLOCK_SIZE);
+ if (ret != ARCHIVE_OK)
+  return (ARCHIVE_FATAL);
+
+
+ ret = write_VD(a, &(iso9660->primary));
+ if (ret != ARCHIVE_OK)
+  return (ARCHIVE_FATAL);
+
+ if (iso9660->opt.boot){
+
+  ret = write_VD_boot_record(a);
+  if (ret != ARCHIVE_OK)
+   return (ARCHIVE_FATAL);
+ }
+
+ if (iso9660->opt.iso_level == 4){
+
+  iso9660->primary.vdd_type = VDD_ENHANCED;
+  ret = write_VD(a, &(iso9660->primary));
+  iso9660->primary.vdd_type = VDD_PRIMARY;
+  if (ret != ARCHIVE_OK)
+   return (ARCHIVE_FATAL);
+ }
+
+ if (iso9660->opt.joliet){
+  ret = write_VD(a, &(iso9660->joliet));
+  if (ret != ARCHIVE_OK)
+   return (ARCHIVE_FATAL);
+ }
+
+
+ ret = write_VD_terminator(a);
+ if (ret != ARCHIVE_OK)
+  return (ARCHIVE_FATAL);
+
+
+ ret = write_information_block(a);
+ if (ret != ARCHIVE_OK)
+  return (ARCHIVE_FATAL);
+
+
+ ret = write_path_table(a, 0, &(iso9660->primary));
+ if (ret != ARCHIVE_OK)
+  return (ARCHIVE_FATAL);
+
+
+ ret = write_path_table(a, 1, &(iso9660->primary));
+ if (ret != ARCHIVE_OK)
+  return (ARCHIVE_FATAL);
+
+ if (iso9660->opt.joliet){
+
+  ret = write_path_table(a, 0, &(iso9660->joliet));
+  if (ret != ARCHIVE_OK)
+   return (ARCHIVE_FATAL);
+
+
+  ret = write_path_table(a, 1, &(iso9660->joliet));
+  if (ret != ARCHIVE_OK)
+   return (ARCHIVE_FATAL);
+ }
+
+
+ ret = write_directory_descriptors(a, &(iso9660->primary));
+ if (ret != ARCHIVE_OK)
+  return (ARCHIVE_FATAL);
+
+ if (iso9660->opt.joliet){
+  ret = write_directory_descriptors(a, &(iso9660->joliet));
+  if (ret != ARCHIVE_OK)
+   return (ARCHIVE_FATAL);
+ }
+
+ if (iso9660->opt.rr){
+
+  ret = write_rr_ER(a);
+  if (ret != ARCHIVE_OK)
+   return (ARCHIVE_FATAL);
+ }
+
+
+ ret = write_file_descriptors(a);
+ if (ret != ARCHIVE_OK)
+  return (ARCHIVE_FATAL);
+
+
+ if (iso9660->opt.pad){
+  ret = write_null(a, PADDING_BLOCK * LOGICAL_BLOCK_SIZE);
+  if (ret != ARCHIVE_OK)
+   return (ARCHIVE_FATAL);
+ }
+
+ if (iso9660->directories_too_deep != NULL){
+  archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+      "%s: Directories too deep.",
+      archive_entry_pathname(
+   iso9660->directories_too_deep->file->entry));
+  return (ARCHIVE_WARN);
+ }
+
+
+ ret = wb_write_out(a);
+
+ return (ret);
+}

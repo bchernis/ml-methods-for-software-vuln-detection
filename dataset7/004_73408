@@ -1,0 +1,23 @@
+ves_icall_System_Environment_get_Platform (void){
+#if defined (PLATFORM_WIN32)
+
+ return 2;
+#elif defined(__MACH__)
+
+ if (mono_framework_version () < 2)
+  return 128;
+
+
+
+
+
+
+
+ return 4;
+#else
+
+ if (mono_framework_version () < 2)
+  return 128;
+ return 4;
+#endif
+}
